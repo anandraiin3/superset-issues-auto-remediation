@@ -154,39 +154,92 @@ Build a production-grade, event-driven automation system that:
 
 ### 6.3 Devin Prompt Design
 
-The quality of remediation depends directly on prompt quality. Each session receives a structured prompt tailored to the issue type:
+The quality of remediation depends directly on prompt quality. Each issue type uses a **distinct prompt template** modelled on the [Devin prompt templates cheat sheet](https://docs.devin.ai/essential-guidelines/prompt-templates-cheat-sheet). This ensures Devin receives the right structure and instructions for each type of work.
+
+#### Bug Prompt Template
 
 ```
-You are resolving a GitHub issue in the following repository.
+Fix the bug described in issue #{issue_number} in the repository below.
 
 Repository: {repo_url}
 Branch: main
 Issue: #{issue_number} — {issue_title}
-Issue Type: {issue_type}
 
-Description:
+Bug description:
 {issue_body}
 
-Instructions:
-1. Analyse the issue described above
-2. Identify the specific file(s) and line(s) affected
-3. Implement a solution that addresses the root cause — not just the symptom
-4. Write or update unit tests covering the changes
-5. Ensure all existing tests continue to pass
+Please:
+1. Investigate the root cause of the bug
+2. Implement a fix that addresses the root cause — not just the symptom
+3. Add a regression test to prevent this issue from recurring
+4. Run the existing test suite to ensure no regressions
+5. Open a pull request with:
+   - Title: "fix: {issue_title} (closes #{issue_number})"
+   - Body: explanation of root cause, what was changed, and why
+   - Reference to Issue #{issue_number}
+
+Scope: Do not make changes beyond what is required to fix this bug.
+```
+
+#### Feature Prompt Template
+
+```
+Implement the feature described in issue #{issue_number} in the repository below.
+
+Repository: {repo_url}
+Branch: main
+Issue: #{issue_number} — {issue_title}
+
+Feature requirements:
+{issue_body}
+
+Please:
+1. Review the existing codebase for related patterns and conventions
+2. Implement the feature following the project's existing conventions
+3. Add input validation and error handling where appropriate
+4. Write unit tests for the new functionality
+5. Run the existing test suite to ensure no regressions
+6. Update documentation if applicable
+7. Open a pull request with:
+   - Title: "feat: {issue_title} (closes #{issue_number})"
+   - Body: explanation of the implementation approach and any design decisions
+   - Reference to Issue #{issue_number}
+
+Scope: Do not make changes beyond what is required to implement this feature.
+```
+
+#### Task Prompt Template
+
+```
+Complete the task described in issue #{issue_number} in the repository below.
+
+Repository: {repo_url}
+Branch: main
+Issue: #{issue_number} — {issue_title}
+
+Task description:
+{issue_body}
+
+Please:
+1. Analyse the current implementation and understand what needs to change
+2. Implement the changes following the project's existing patterns and conventions
+3. Keep all existing functionality intact
+4. Ensure all existing tests still pass
+5. Add tests for any new functions or changed behaviour
 6. Open a pull request with:
-   - Title: "{pr_prefix}: {issue_title} (closes #{issue_number})"
+   - Title: "chore: {issue_title} (closes #{issue_number})"
    - Body: explanation of what was changed and why
    - Reference to Issue #{issue_number}
 
-Scope: Do not make changes beyond what is required to resolve this specific issue.
+Scope: Do not make changes beyond what is required to complete this task.
 ```
 
 **Issue type to PR prefix mapping:**
-| Issue Type | PR Prefix |
-|---|---|
-| `Bug` | `fix:` |
-| `Feature` | `feat:` |
-| `Task` | `chore:` |
+| Issue Type | PR Prefix | Prompt Focus |
+|---|---|---|
+| `Bug` | `fix:` | Root cause analysis, regression testing |
+| `Feature` | `feat:` | Pattern adherence, validation, documentation |
+| `Task` | `chore:` | Convention following, preserving existing functionality |
 
 | ID | Requirement | Priority |
 |---|---|---|
@@ -195,6 +248,7 @@ Scope: Do not make changes beyond what is required to resolve this specific issu
 | PR-03 | Prompt must constrain scope — fixes only, no unrelated changes | Must Have |
 | PR-04 | Prompt must require test coverage for the fix | Must Have |
 | PR-05 | Prompt template must be configurable via environment or config file | Should Have |
+| PR-06 | Each issue type must use a distinct prompt template following the Devin cheat sheet | Must Have |
 
 ---
 
@@ -362,7 +416,7 @@ The system is considered production-ready when:
 ### v1.1 (April 2026)
 - **Issue type filtering**: System now filters by GitHub's native issue type field (`issue.type.name`) instead of labels. Supports `Bug`, `Feature`, and `Task`.
 - **Replaced `VULNERABILITY_LABEL`** with `ISSUE_TYPES` environment variable (comma-separated list of type names)
-- **Type-aware prompts**: Prompt builder maps issue types to conventional commit prefixes (`fix:`, `feat:`, `chore:`)
+- **Type-specific prompt templates**: Each issue type (Bug, Feature, Task) uses a distinct prompt template modelled on the [Devin prompt templates cheat sheet](https://docs.devin.ai/essential-guidelines/prompt-templates-cheat-sheet), with type-appropriate instructions and conventional commit prefixes (`fix:`, `feat:`, `chore:`)
 - **GitHub Actions CI**: Added lint (ruff), test (pytest), and Docker build jobs
 - **Updated PRD to v1.1** reflecting expanded scope
 

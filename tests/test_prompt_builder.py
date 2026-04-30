@@ -11,7 +11,9 @@ from src.prompt_builder import build_prompt
 
 
 class PromptBuilderTestCase(unittest.TestCase):
-    def test_default_prompt_contains_all_fields(self) -> None:
+    # -- Bug type ----------------------------------------------------------
+
+    def test_bug_prompt_uses_fix_prefix(self) -> None:
         prompt = build_prompt(
             repo_url="https://github.com/org/repo",
             issue_number=42,
@@ -19,15 +21,27 @@ class PromptBuilderTestCase(unittest.TestCase):
             issue_body="The search bar is vulnerable to XSS.",
             issue_type="bug",
         )
-        self.assertIn("https://github.com/org/repo", prompt)
-        self.assertIn("#42", prompt)
-        self.assertIn("XSS in search", prompt)
-        self.assertIn("The search bar is vulnerable to XSS.", prompt)
-        self.assertIn("pull request", prompt)
-        self.assertIn("unit tests", prompt)
-        self.assertIn("bug", prompt)
+        self.assertIn("fix:", prompt)
 
-    def test_feature_type_uses_feat_prefix(self) -> None:
+    def test_bug_prompt_follows_cheat_sheet_structure(self) -> None:
+        prompt = build_prompt(
+            repo_url="https://github.com/org/repo",
+            issue_number=42,
+            issue_title="Crash on save",
+            issue_body="App crashes when saving.",
+            issue_type="bug",
+        )
+        self.assertIn("Fix the bug", prompt)
+        self.assertIn("Investigate the root cause", prompt)
+        self.assertIn("regression test", prompt)
+        self.assertIn("Bug description:", prompt)
+        self.assertIn("#42", prompt)
+        self.assertIn("https://github.com/org/repo", prompt)
+        self.assertIn("App crashes when saving.", prompt)
+
+    # -- Feature type ------------------------------------------------------
+
+    def test_feature_prompt_uses_feat_prefix(self) -> None:
         prompt = build_prompt(
             repo_url="https://github.com/org/repo",
             issue_number=10,
@@ -36,9 +50,24 @@ class PromptBuilderTestCase(unittest.TestCase):
             issue_type="feature",
         )
         self.assertIn("feat:", prompt)
-        self.assertIn("feature", prompt)
 
-    def test_task_type_uses_chore_prefix(self) -> None:
+    def test_feature_prompt_follows_cheat_sheet_structure(self) -> None:
+        prompt = build_prompt(
+            repo_url="https://github.com/org/repo",
+            issue_number=10,
+            issue_title="Add search",
+            issue_body="Implement search functionality.",
+            issue_type="feature",
+        )
+        self.assertIn("Implement the feature", prompt)
+        self.assertIn("Feature requirements:", prompt)
+        self.assertIn("existing conventions", prompt)
+        self.assertIn("input validation", prompt)
+        self.assertIn("unit tests", prompt)
+
+    # -- Task type ---------------------------------------------------------
+
+    def test_task_prompt_uses_chore_prefix(self) -> None:
         prompt = build_prompt(
             repo_url="https://github.com/org/repo",
             issue_number=11,
@@ -48,15 +77,20 @@ class PromptBuilderTestCase(unittest.TestCase):
         )
         self.assertIn("chore:", prompt)
 
-    def test_bug_type_uses_fix_prefix(self) -> None:
+    def test_task_prompt_follows_cheat_sheet_structure(self) -> None:
         prompt = build_prompt(
             repo_url="https://github.com/org/repo",
-            issue_number=12,
-            issue_title="Crash on save",
-            issue_body="App crashes.",
-            issue_type="bug",
+            issue_number=11,
+            issue_title="Refactor config",
+            issue_body="Clean up config module.",
+            issue_type="task",
         )
-        self.assertIn("fix:", prompt)
+        self.assertIn("Complete the task", prompt)
+        self.assertIn("Task description:", prompt)
+        self.assertIn("existing patterns", prompt)
+        self.assertIn("existing functionality intact", prompt)
+
+    # -- Default and override ----------------------------------------------
 
     def test_default_type_is_task(self) -> None:
         prompt = build_prompt(
@@ -65,7 +99,18 @@ class PromptBuilderTestCase(unittest.TestCase):
             issue_title="Something",
             issue_body="body",
         )
-        self.assertIn("task", prompt)
+        self.assertIn("Complete the task", prompt)
+        self.assertIn("chore:", prompt)
+
+    def test_unknown_type_falls_back_to_task(self) -> None:
+        prompt = build_prompt(
+            repo_url="https://github.com/org/repo",
+            issue_number=14,
+            issue_title="Custom type",
+            issue_body="body",
+            issue_type="epic",
+        )
+        self.assertIn("Complete the task", prompt)
         self.assertIn("chore:", prompt)
 
     def test_custom_template_via_env(self) -> None:
@@ -80,6 +125,20 @@ class PromptBuilderTestCase(unittest.TestCase):
             self.assertEqual(prompt, "Fix Bug in https://github.com/org/repo")
         finally:
             del os.environ["PROMPT_TEMPLATE"]
+
+    def test_each_type_produces_distinct_prompt(self) -> None:
+        args = {
+            "repo_url": "https://github.com/org/repo",
+            "issue_number": 99,
+            "issue_title": "Test",
+            "issue_body": "body",
+        }
+        bug = build_prompt(**args, issue_type="bug")
+        feat = build_prompt(**args, issue_type="feature")
+        task = build_prompt(**args, issue_type="task")
+        self.assertNotEqual(bug, feat)
+        self.assertNotEqual(feat, task)
+        self.assertNotEqual(bug, task)
 
 
 if __name__ == "__main__":
