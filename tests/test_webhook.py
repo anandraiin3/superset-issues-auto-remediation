@@ -23,9 +23,7 @@ class WebhookTestCase(unittest.TestCase):
         self.secret = "test-secret"
 
     def _sign(self, payload: bytes) -> str:
-        sig = hmac.new(
-            self.secret.encode(), payload, hashlib.sha256
-        ).hexdigest()
+        sig = hmac.new(self.secret.encode(), payload, hashlib.sha256).hexdigest()
         return f"sha256={sig}"
 
     def _post_webhook(
@@ -63,7 +61,21 @@ class WebhookTestCase(unittest.TestCase):
         resp = self._post_webhook({"action": "created"}, event="push")
         self.assertEqual(resp.status_code, 200)
 
-    def test_issue_without_label_returns_200_no_dispatch(self) -> None:
+    def test_issue_without_matching_label_returns_200(self) -> None:
+        payload = {
+            "action": "opened",
+            "issue": {
+                "number": 1,
+                "title": "Test issue",
+                "body": "desc",
+                "labels": [{"name": "wontfix"}],
+            },
+            "repository": {"html_url": "https://github.com/test/repo"},
+        }
+        resp = self._post_webhook(payload)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_issue_with_no_labels_returns_200(self) -> None:
         payload = {
             "action": "opened",
             "issue": {
@@ -78,14 +90,14 @@ class WebhookTestCase(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
 
     @patch("src.webhook.remediate_issue")
-    def test_vulnerability_label_triggers_remediation(self, mock_remediate) -> None:
+    def test_bug_label_triggers_remediation(self, mock_remediate) -> None:
         payload = {
             "action": "opened",
             "issue": {
                 "number": 42,
                 "title": "XSS in login",
                 "body": "details...",
-                "labels": [{"name": "vulnerability"}],
+                "labels": [{"name": "bug"}],
             },
             "repository": {"html_url": "https://github.com/test/repo"},
         }
@@ -93,14 +105,29 @@ class WebhookTestCase(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
 
     @patch("src.webhook.remediate_issue")
-    def test_labeled_action_triggers_remediation(self, mock_remediate) -> None:
+    def test_feature_label_triggers_remediation(self, mock_remediate) -> None:
+        payload = {
+            "action": "opened",
+            "issue": {
+                "number": 43,
+                "title": "Add dark mode",
+                "body": "details...",
+                "labels": [{"name": "feature"}],
+            },
+            "repository": {"html_url": "https://github.com/test/repo"},
+        }
+        resp = self._post_webhook(payload)
+        self.assertEqual(resp.status_code, 200)
+
+    @patch("src.webhook.remediate_issue")
+    def test_task_label_triggers_remediation(self, mock_remediate) -> None:
         payload = {
             "action": "labeled",
             "issue": {
-                "number": 99,
-                "title": "SQL injection",
+                "number": 44,
+                "title": "Update dependencies",
                 "body": "details...",
-                "labels": [{"name": "vulnerability"}],
+                "labels": [{"name": "task"}],
             },
             "repository": {"html_url": "https://github.com/test/repo"},
         }
@@ -114,7 +141,6 @@ class WebhookTestCase(unittest.TestCase):
             "X-Hub-Signature-256": self._sign(body),
         }
         resp = self.client.post("/webhook", data=body, headers=headers)
-        # Flask's get_json(force=True) may parse or fail gracefully
         self.assertIn(resp.status_code, (200, 403))
 
     def test_closed_action_ignored(self) -> None:
@@ -124,7 +150,7 @@ class WebhookTestCase(unittest.TestCase):
                 "number": 1,
                 "title": "Test",
                 "body": "",
-                "labels": [{"name": "vulnerability"}],
+                "labels": [{"name": "bug"}],
             },
             "repository": {"html_url": "https://github.com/test/repo"},
         }

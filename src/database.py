@@ -117,7 +117,11 @@ def update_session_status(
         ttr = None
         if row:
             created = datetime.fromisoformat(row["created_at"])
-            created_aware = created.replace(tzinfo=timezone.utc) if created.tzinfo is None else created
+            created_aware = (
+                created.replace(tzinfo=timezone.utc)
+                if created.tzinfo is None
+                else created
+            )
             ttr = int((datetime.now(timezone.utc) - created_aware).total_seconds())
 
         conn.execute(
@@ -158,9 +162,7 @@ def update_session_status(
 def get_all_sessions() -> list[dict]:
     """Return all session records ordered by most recent first."""
     conn = _get_connection()
-    rows = conn.execute(
-        "SELECT * FROM sessions ORDER BY created_at DESC"
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM sessions ORDER BY created_at DESC").fetchall()
     return [dict(r) for r in rows]
 
 

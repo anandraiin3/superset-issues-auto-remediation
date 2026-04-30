@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff check src/ tests/ app.py
+      - run: ruff format --check src/ tests/ app.py
+
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_WEBHOOK_SECRET: test-secret
+      DEVIN_API_KEY: test-key
+      REPOSITORY_URL: https://github.com/test/repo
+      DATABASE_PATH: ":memory:"
+      POLLING_INTERVAL_SECONDS: "0"
+      SESSION_TIMEOUT_MINUTES: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest tests/ -v
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t remediation-test .

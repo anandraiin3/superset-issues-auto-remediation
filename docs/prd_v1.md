@@ -1,7 +1,7 @@
 # Product Requirements Document
-## Event-Driven Vulnerability Remediation System
+## Event-Driven Issue Remediation System
 **Author:** Anand Rai
-**Version:** 1.0
+**Version:** 1.1
 **Date:** April 2026
 **Status:** Draft
 
@@ -9,22 +9,22 @@
 
 ## 1. Problem Statement
 
-Engineering teams at scale face a growing and unmanageable backlog of security vulnerabilities. Manual remediation is slow, inconsistent, and expensive — it requires engineers to context-switch from feature work to security triage, understand unfamiliar code, write fixes, test them, and open pull requests. This process takes hours per vulnerability and weeks at backlog scale.
+Engineering teams at scale face a growing and unmanageable backlog of issues — bugs, feature requests, and maintenance tasks. Manual remediation is slow, inconsistent, and expensive — it requires engineers to context-switch, understand unfamiliar code, write fixes or features, test them, and open pull requests. This process takes hours per issue and weeks at backlog scale.
 
 **The business cost is threefold:**
-- Security exposure window remains open while vulnerabilities sit unaddressed in the backlog
-- Engineer productivity is degraded by context-switching to low-value remediation work
-- Compliance posture weakens as vulnerability backlogs grow faster than teams can address them
+- Issues remain open while they sit unaddressed in the backlog
+- Engineer productivity is degraded by context-switching between issue types
+- Delivery velocity drops as backlogs grow faster than teams can address them
 
-**Root cause:** Vulnerability remediation is a well-scoped, repeatable engineering task that is currently dependent on human engineers despite being highly automatable.
+**Root cause:** Issue remediation is a well-scoped, repeatable engineering task that is currently dependent on human engineers despite being highly automatable.
 
 ---
 
 ## 2. Objective
 
 Build a production-grade, event-driven automation system that:
-- Detects newly identified vulnerability issues in a GitHub repository
-- Automatically initiates an AI agent session to analyse and remediate each issue
+- Detects newly created or labelled issues in a GitHub repository (bugs, features, tasks)
+- Automatically initiates an AI agent session to analyse and resolve each issue
 - Produces auditable, reviewable outputs — pull requests with fixes and tests
 - Gives engineering leadership real-time visibility into system health and effectiveness
 - Scales across repositories and organisations without linear growth in engineering effort
@@ -35,22 +35,24 @@ Build a production-grade, event-driven automation system that:
 
 | User | Role | Primary Need |
 |---|---|---|
-| VP of Engineering | Economic buyer | Reduce vulnerability backlog without consuming engineer time. Measurable security posture improvement. |
+| VP of Engineering | Economic buyer | Reduce issue backlog without consuming engineer time. Measurable velocity improvement. |
 | Senior Engineers | Technical reviewers | Trust that AI-generated fixes are correct, well-tested, and follow team conventions before merging |
-| Security / Compliance Team | Stakeholders | Audit trail showing every vulnerability was identified, assigned, actioned, and resolved with timestamps |
+| Product / Project Managers | Stakeholders | Audit trail showing every issue was identified, assigned, actioned, and resolved with timestamps |
 | DevOps / Platform Engineering | Operators | System runs reliably, is observable, integrates with existing toolchain, and fails gracefully |
 
 ---
 
 ## 4. Scope
 
-### In Scope — Version 1.0
-- Webhook listener triggered by GitHub issue creation with configurable label (default: `vulnerability`)
+### In Scope — Version 1.1
+- Webhook listener triggered by GitHub issue creation with configurable labels (default: `bug`, `feature`, `task`)
+- Support for all standard GitHub issue types: bugs, features, and tasks
 - AI agent session manager — creates, monitors, and tracks remediation sessions via Devin API
 - Idempotent session handling — prevents duplicate remediations for the same issue
 - Observability layer — logs session lifecycle, PR output, success/failure signals, time-to-remediation
 - Operational dashboard — real-time view of system health and remediation throughput
 - Docker containerisation for reproducible, portable deployment
+- GitHub Actions CI pipeline (lint, test, Docker build)
 
 ### Out of Scope — Future Phases
 - Automatic vulnerability scanning (Snyk, Dependabot, SAST tool integration)
@@ -68,14 +70,14 @@ Build a production-grade, event-driven automation system that:
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                   GitHub Repository                      │
-│  Issue created with label: "vulnerability"               │
+│  Issue created with label: bug / feature / task           │
 └─────────────────────────┬───────────────────────────────┘
                           │ Webhook POST
                           ▼
 ┌─────────────────────────────────────────────────────────┐
 │              Webhook Listener Service                    │
 │  • Validates GitHub webhook signature (HMAC-SHA256)      │
-│  • Filters for configured vulnerability label            │
+│  • Filters for configured issue labels                   │
 │  • Returns 200 immediately                               │
 │  • Enqueues remediation job asynchronously               │
 └─────────────────────────┬───────────────────────────────┘
@@ -125,10 +127,10 @@ Build a production-grade, event-driven automation system that:
 | WH-02 | Validate GitHub webhook signature using HMAC-SHA256 and shared secret | Must Have |
 | WH-03 | Return HTTP 200 immediately before processing — webhook delivery must not time out | Must Have |
 | WH-04 | Filter events — only process `issues.opened` or `issues.labeled` events | Must Have |
-| WH-05 | Only trigger remediation for issues containing the configured vulnerability label | Must Have |
+| WH-05 | Only trigger remediation for issues containing at least one configured label | Must Have |
 | WH-06 | Process remediation jobs asynchronously — decouple from HTTP response | Must Have |
 | WH-07 | Handle malformed payloads gracefully — log and discard without crashing | Must Have |
-| WH-08 | Support configurable label name via environment variable (default: `vulnerability`) | Should Have |
+| WH-08 | Support configurable label list via environment variable (default: `bug,feature,task`) | Should Have |
 
 ---
 
@@ -152,31 +154,39 @@ Build a production-grade, event-driven automation system that:
 
 ### 6.3 Devin Prompt Design
 
-The quality of remediation depends directly on prompt quality. Each session receives a structured prompt:
+The quality of remediation depends directly on prompt quality. Each session receives a structured prompt tailored to the issue type:
 
 ```
-You are remediating a security vulnerability in the following repository.
+You are resolving a GitHub issue in the following repository.
 
 Repository: {repo_url}
 Branch: main
 Issue: #{issue_number} — {issue_title}
+Issue Type: {issue_type}
 
 Description:
 {issue_body}
 
 Instructions:
-1. Analyse the vulnerability described above
+1. Analyse the issue described above
 2. Identify the specific file(s) and line(s) affected
-3. Implement a fix that addresses the root cause — not just the symptom
-4. Write or update unit tests covering the vulnerability scenario
+3. Implement a solution that addresses the root cause — not just the symptom
+4. Write or update unit tests covering the changes
 5. Ensure all existing tests continue to pass
 6. Open a pull request with:
-   - Title: "fix: remediate {issue_title} (closes #{issue_number})"
-   - Body: explanation of what was vulnerable and how you fixed it
+   - Title: "{pr_prefix}: {issue_title} (closes #{issue_number})"
+   - Body: explanation of what was changed and why
    - Reference to Issue #{issue_number}
 
-Scope: Do not make changes beyond what is required to remediate this specific issue.
+Scope: Do not make changes beyond what is required to resolve this specific issue.
 ```
+
+**Issue type to PR prefix mapping:**
+| Label | PR Prefix |
+|---|---|
+| `bug` | `fix:` |
+| `feature` | `feat:` |
+| `task` | `chore:` |
 
 | ID | Requirement | Priority |
 |---|---|---|
@@ -294,7 +304,7 @@ All configuration injected via environment variables:
 | `DEVIN_API_KEY` | Devin API authentication key | — | Yes |
 | `GITHUB_TOKEN` | GitHub personal access token for PR operations | — | Yes |
 | `REPOSITORY_URL` | Target GitHub repository URL | — | Yes |
-| `VULNERABILITY_LABEL` | Issue label that triggers remediation | `vulnerability` | No |
+| `ISSUE_LABELS` | Comma-separated list of issue labels that trigger remediation | `bug,feature,task` | No |
 | `POLLING_INTERVAL_SECONDS` | How often to poll Devin session status | `30` | No |
 | `SESSION_TIMEOUT_MINUTES` | Max session duration before marking timed out | `45` | No |
 | `DATABASE_PATH` | Path to SQLite database file | `/data/sessions.db` | No |
@@ -321,7 +331,7 @@ The system is considered production-ready when:
 
 | Criteria | Measurement |
 |---|---|
-| Event triggering | A GitHub issue labelled `vulnerability` triggers a Devin session within 60 seconds — without manual intervention |
+| Event triggering | A GitHub issue labelled `bug`, `feature`, or `task` triggers a Devin session within 60 seconds — without manual intervention |
 | Remediation quality | Devin successfully opens a pull request with a fix and tests in ≥ 70% of triggered sessions |
 | Idempotency | Creating the same issue twice does not create duplicate sessions |
 | Observability | Dashboard accurately reflects all session states and PR outcomes in real time |
@@ -343,4 +353,15 @@ The system is considered production-ready when:
 
 ---
 
-*PRD Version 1.0 — Anand Rai — April 2026*
+*PRD Version 1.1 — Anand Rai — April 2026*
+
+---
+
+## Changelog
+
+### v1.1 (April 2026)
+- **Expanded issue type support**: System now handles `bug`, `feature`, and `task` labels (previously only `vulnerability`)
+- **Multi-label configuration**: `VULNERABILITY_LABEL` replaced by `ISSUE_LABELS` (comma-separated)
+- **Type-aware prompts**: Prompt builder maps issue types to conventional commit prefixes (`fix:`, `feat:`, `chore:`)
+- **GitHub Actions CI**: Added lint (ruff), test (pytest), and Docker build jobs
+- **Updated PRD to v1.1** reflecting expanded scope

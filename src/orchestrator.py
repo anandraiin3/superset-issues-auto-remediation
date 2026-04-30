@@ -1,7 +1,8 @@
 """Remediation orchestrator — manages Devin session lifecycle.
 
 RO-01 – RO-11: Creates sessions via Devin API, polls until terminal
-state, extracts PR URL, and handles timeouts / failures.
+state, extracts PR URL, and handles timeouts / failures.  Supports
+all GitHub issue types (bug, feature, task).
 """
 
 import time
@@ -37,13 +38,14 @@ def _create_devin_session(
     prompt: str,
     issue_number: int,
     issue_title: str,
+    issue_type: str = "task",
 ) -> dict:
     """Call Devin API to create a new session (RO-03 / RO-04)."""
     payload = {
         "prompt": prompt,
         "idempotent": True,
-        "title": f"Remediate #{issue_number}: {issue_title}",
-        "tags": ["auto-remediation", f"issue-{issue_number}"],
+        "title": f"Resolve #{issue_number} [{issue_type}]: {issue_title}",
+        "tags": ["auto-remediation", f"issue-{issue_number}", issue_type],
     }
 
     resp = requests.post(
@@ -80,6 +82,7 @@ def remediate_issue(
     issue_number: int,
     issue_title: str,
     issue_body: str,
+    issue_labels: list[str] | None = None,
 ) -> None:
     """End-to-end remediation: create session, poll, extract result.
 
@@ -98,14 +101,17 @@ def remediate_issue(
             return
 
         # Build prompt (PR-01 – PR-04)
-        prompt = build_prompt(repo_url, issue_number, issue_title, issue_body)
+        prompt = build_prompt(
+            repo_url, issue_number, issue_title, issue_body, issue_labels
+        )
 
         # RO-03 / RO-04: Create Devin session
         logger.info(
             f"Creating Devin session for issue #{issue_number}",
             extra={**log_extra, "event_type": "session_creating"},
         )
-        result = _create_devin_session(prompt, issue_number, issue_title)
+        issue_type = issue_labels[0] if issue_labels else "task"
+        result = _create_devin_session(prompt, issue_number, issue_title, issue_type)
         session_id = result["session_id"]
         log_extra["session_id"] = session_id
 

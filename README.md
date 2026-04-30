@@ -1,11 +1,11 @@
 # Superset Issues Auto-Remediation
 
-Event-driven vulnerability remediation system that automatically detects GitHub issues labelled `vulnerability` and triggers [Devin AI](https://devin.ai) sessions to analyse, fix, and open pull requests.
+Event-driven issue remediation system that automatically detects GitHub issues labelled with configured types (`bug`, `feature`, `task`) and triggers [Devin AI](https://devin.ai) sessions to analyse, implement, and open pull requests.
 
 ## Architecture
 
 ```
-GitHub Issue (label: vulnerability)
+GitHub Issue (labels: bug, feature, task)
         │ Webhook POST
         ▼
   Webhook Listener ──► Remediation Orchestrator ──► Devin API
@@ -58,22 +58,44 @@ All configuration is injected via environment variables:
 | `DEVIN_API_KEY` | Devin API authentication key | — | Yes |
 | `GITHUB_TOKEN` | GitHub personal access token | — | No |
 | `REPOSITORY_URL` | Target GitHub repository URL | — | Yes |
-| `VULNERABILITY_LABEL` | Issue label that triggers remediation | `vulnerability` | No |
+| `ISSUE_LABELS` | Comma-separated list of issue labels that trigger remediation | `bug,feature,task` | No |
 | `POLLING_INTERVAL_SECONDS` | Devin session poll interval | `30` | No |
 | `SESSION_TIMEOUT_MINUTES` | Max session duration before timeout | `45` | No |
 | `DATABASE_PATH` | SQLite database file path | `/data/sessions.db` | No |
 | `DASHBOARD_PORT` | Dashboard HTTP port | `5000` | No |
 
+## Supported Issue Types
+
+The system supports all standard GitHub issue types:
+
+| Label | PR Prefix | Description |
+|---|---|---|
+| `bug` | `fix:` | Bug fixes and error corrections |
+| `feature` | `feat:` | New features and enhancements |
+| `task` | `chore:` | Maintenance tasks, dependency updates, refactoring |
+
+Labels are configurable via the `ISSUE_LABELS` environment variable (comma-separated).
+
 ## How It Works
 
 1. **Webhook received** — GitHub sends a POST when an issue is created or labelled
 2. **Signature validated** — HMAC-SHA256 verification ensures the payload is authentic
-3. **Label filtered** — Only issues with the configured vulnerability label proceed
+3. **Label matched** — Only issues with at least one configured label proceed
 4. **Idempotency check** — Duplicate issues are detected and skipped
-5. **Devin session created** — A structured prompt with issue context is sent to the Devin API
+5. **Devin session created** — A structured prompt with issue context and type is sent to the Devin API
 6. **Session polled** — The orchestrator polls session status until completion, failure, or timeout
 7. **Result recorded** — PR URL, status, and timing metrics are persisted to SQLite
 8. **Dashboard updated** — Real-time view of all remediation sessions
+
+## CI/CD
+
+The project uses GitHub Actions for continuous integration:
+
+- **Lint** — `ruff check` and `ruff format --check` on all Python files
+- **Test** — `pytest` runs all 26 tests
+- **Docker build** — Verifies the Docker image builds successfully
+
+CI runs on every push to `main` and on all pull requests.
 
 ## Development
 
@@ -96,8 +118,16 @@ python app.py
 ### Run tests
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt pytest
 python -m pytest tests/ -v
+```
+
+### Lint
+
+```bash
+pip install ruff
+ruff check src/ tests/ app.py
+ruff format --check src/ tests/ app.py
 ```
 
 ## Dashboard
@@ -130,3 +160,4 @@ The dashboard auto-refreshes every 30 seconds.
 | Observability store | SQLite |
 | Dashboard | Flask + Jinja2 |
 | Containerisation | Docker + docker-compose |
+| CI | GitHub Actions |

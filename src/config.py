@@ -3,6 +3,11 @@
 import os
 
 
+def _parse_labels(raw: str) -> list[str]:
+    """Parse a comma-separated label string into a list of trimmed names."""
+    return [label.strip() for label in raw.split(",") if label.strip()]
+
+
 class Config:
     """Centralised configuration — all values injectable via environment."""
 
@@ -11,13 +16,15 @@ class Config:
     GITHUB_TOKEN: str = os.environ.get("GITHUB_TOKEN", "")
     REPOSITORY_URL: str = os.environ.get("REPOSITORY_URL", "")
 
-    VULNERABILITY_LABEL: str = os.environ.get("VULNERABILITY_LABEL", "vulnerability")
+    # Comma-separated list of issue labels that trigger remediation.
+    # Supports all standard GitHub issue types: bug, feature, task, etc.
+    ISSUE_LABELS: list[str] = _parse_labels(
+        os.environ.get("ISSUE_LABELS", "bug,feature,task")
+    )
     POLLING_INTERVAL_SECONDS: int = int(
         os.environ.get("POLLING_INTERVAL_SECONDS", "30")
     )
-    SESSION_TIMEOUT_MINUTES: int = int(
-        os.environ.get("SESSION_TIMEOUT_MINUTES", "45")
-    )
+    SESSION_TIMEOUT_MINUTES: int = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "45"))
     DATABASE_PATH: str = os.environ.get("DATABASE_PATH", "/data/sessions.db")
     DASHBOARD_PORT: int = int(os.environ.get("DASHBOARD_PORT", "5000"))
 

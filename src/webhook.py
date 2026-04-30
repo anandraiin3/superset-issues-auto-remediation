@@ -1,15 +1,14 @@
 """GitHub webhook listener.
 
 WH-01 – WH-08: Accepts POST on /webhook, validates HMAC-SHA256
-signature, filters for vulnerability-labelled issues, and dispatches
-remediation asynchronously.
+signature, filters for configured issue labels (bug, feature, task,
+etc.), and dispatches remediation asynchronously.
 """
 
 import hashlib
 import hmac
 import threading
-from queue import Queue
-from typing import Any
+from typing import Any, Optional
 
 from flask import Blueprint, Response, request
 
@@ -20,8 +19,6 @@ from src.orchestrator import remediate_issue
 logger = get_logger(__name__)
 
 webhook_bp = Blueprint("webhook", __name__)
-
-_job_queue: Queue = Queue()
 
 
 def _verify_signature(payload_body: bytes, signature_header: str) -> bool:
@@ -43,11 +40,12 @@ def _process_job(
     issue_number: int,
     issue_title: str,
     issue_body: str,
+    issue_labels: list[str],
 ) -> None:
     """Run remediation in a daemon thread (WH-06)."""
     thread = threading.Thread(
         target=remediate_issue,
-        args=(repo_url, issue_number, issue_title, issue_body),
+        args=(repo_url, issue_number, issue_title, issue_body, issue_labels),
         daemon=True,
     )
     thread.start()
@@ -57,10 +55,18 @@ def _process_job(
     )
 
 
-def _issue_has_label(issue: dict[str, Any], label_name: str) -> bool:
-    """Check whether the issue carries the target vulnerability label."""
+def _get_matching_labels(issue: dict[str, Any]) -> list[str]:
+    """Return the list of issue label names that match configured labels."""
     labels = issue.get("labels", [])
-    return any(lbl.get("name") == label_name for lbl in labels)
+    issue_label_names = [lbl.get("name", "") for lbl in labels]
+    return [name for name in issue_label_names if name in Config.ISSUE_LABELS]
+
+
+def _get_issue_type(labels: list[str]) -> Optional[str]:
+    """Derive the primary issue type from matched labels."""
+    if not labels:
+        return None
+    return labels[0]
 
 
 @webhook_bp.route("/webhook", methods=["POST"])
@@ -107,10 +113,12 @@ def handle_webhook() -> tuple[Response, int]:
     if not issue:
         return Response("OK", status=200)
 
-    # WH-05 / WH-08: Only trigger for configured vulnerability label
-    if not _issue_has_label(issue, Config.VULNERABILITY_LABEL):
+    # WH-05 / WH-08: Only trigger for issues with at least one configured label
+    matching_labels = _get_matching_labels(issue)
+    if not matching_labels:
         logger.info(
-            f"Issue #{issue.get('number')} missing label '{Config.VULNERABILITY_LABEL}' — skipping",
+            f"Issue #{issue.get('number')} has no matching labels "
+            f"(configured: {Config.ISSUE_LABELS}) — skipping",
             extra={
                 "issue_number": issue.get("number"),
                 "event_type": "label_missing",
@@ -124,12 +132,12 @@ def handle_webhook() -> tuple[Response, int]:
     issue_body: str = issue.get("body", "") or ""
 
     logger.info(
-        f"Accepted issue #{issue_number}: {issue_title}",
+        f"Accepted issue #{issue_number}: {issue_title} (labels: {matching_labels})",
         extra={"issue_number": issue_number, "event_type": "issue_accepted"},
     )
 
     # WH-06: Asynchronous processing
-    _process_job(repo_url, issue_number, issue_title, issue_body)
+    _process_job(repo_url, issue_number, issue_title, issue_body, matching_labels)
 
     # WH-03: Return 200 immediately
     return Response("OK", status=200)
