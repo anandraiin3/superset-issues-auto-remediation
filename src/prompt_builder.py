@@ -31,18 +31,17 @@ Instructions:
 Scope: Do not make changes beyond what is required to resolve this specific issue.\
 """
 
-# Map issue labels to conventional commit prefixes
-_LABEL_TO_PREFIX = {
+# Map GitHub issue types to conventional commit prefixes
+_TYPE_TO_PREFIX = {
     "bug": "fix",
     "feature": "feat",
     "task": "chore",
-    "vulnerability": "fix",
 }
 
 
 def _derive_pr_prefix(issue_type: str) -> str:
-    """Map an issue type label to a conventional commit prefix."""
-    return _LABEL_TO_PREFIX.get(issue_type, "fix")
+    """Map a GitHub issue type to a conventional commit prefix."""
+    return _TYPE_TO_PREFIX.get(issue_type.lower(), "fix")
 
 
 def build_prompt(
@@ -50,7 +49,7 @@ def build_prompt(
     issue_number: int,
     issue_title: str,
     issue_body: str,
-    issue_labels: list[str] | None = None,
+    issue_type: str = "task",
 ) -> str:
     """Build the remediation prompt from issue context.
 
@@ -66,7 +65,6 @@ def build_prompt(
     elif os.environ.get("PROMPT_TEMPLATE"):
         template = os.environ["PROMPT_TEMPLATE"]
 
-    issue_type = issue_labels[0] if issue_labels else "task"
     pr_prefix = _derive_pr_prefix(issue_type)
 
     return template.format(

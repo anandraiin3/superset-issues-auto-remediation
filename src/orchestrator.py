@@ -82,7 +82,7 @@ def remediate_issue(
     issue_number: int,
     issue_title: str,
     issue_body: str,
-    issue_labels: list[str] | None = None,
+    issue_type: str = "task",
 ) -> None:
     """End-to-end remediation: create session, poll, extract result.
 
@@ -102,15 +102,14 @@ def remediate_issue(
 
         # Build prompt (PR-01 – PR-04)
         prompt = build_prompt(
-            repo_url, issue_number, issue_title, issue_body, issue_labels
+            repo_url, issue_number, issue_title, issue_body, issue_type
         )
 
         # RO-03 / RO-04: Create Devin session
         logger.info(
-            f"Creating Devin session for issue #{issue_number}",
+            f"Creating Devin session for issue #{issue_number} (type={issue_type})",
             extra={**log_extra, "event_type": "session_creating"},
         )
-        issue_type = issue_labels[0] if issue_labels else "task"
         result = _create_devin_session(prompt, issue_number, issue_title, issue_type)
         session_id = result["session_id"]
         log_extra["session_id"] = session_id

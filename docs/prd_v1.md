@@ -23,7 +23,7 @@ Engineering teams at scale face a growing and unmanageable backlog of issues —
 ## 2. Objective
 
 Build a production-grade, event-driven automation system that:
-- Detects newly created or labelled issues in a GitHub repository (bugs, features, tasks)
+- Detects newly created GitHub issues by their native issue type (Bug, Feature, Task)
 - Automatically initiates an AI agent session to analyse and resolve each issue
 - Produces auditable, reviewable outputs — pull requests with fixes and tests
 - Gives engineering leadership real-time visibility into system health and effectiveness
@@ -45,8 +45,8 @@ Build a production-grade, event-driven automation system that:
 ## 4. Scope
 
 ### In Scope — Version 1.1
-- Webhook listener triggered by GitHub issue creation with configurable labels (default: `bug`, `feature`, `task`)
-- Support for all standard GitHub issue types: bugs, features, and tasks
+- Webhook listener triggered by GitHub issue creation, filtered by native issue type (default: `Bug`, `Feature`, `Task`)
+- Support for all standard GitHub issue types via the `issue.type` field in webhook payloads
 - AI agent session manager — creates, monitors, and tracks remediation sessions via Devin API
 - Idempotent session handling — prevents duplicate remediations for the same issue
 - Observability layer — logs session lifecycle, PR output, success/failure signals, time-to-remediation
@@ -70,14 +70,14 @@ Build a production-grade, event-driven automation system that:
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                   GitHub Repository                      │
-│  Issue created with label: bug / feature / task           │
+│  Issue created with type: Bug / Feature / Task            │
 └─────────────────────────┬───────────────────────────────┘
                           │ Webhook POST
                           ▼
 ┌─────────────────────────────────────────────────────────┐
 │              Webhook Listener Service                    │
 │  • Validates GitHub webhook signature (HMAC-SHA256)      │
-│  • Filters for configured issue labels                   │
+│  • Filters by GitHub issue type (Bug/Feature/Task)        │
 │  • Returns 200 immediately                               │
 │  • Enqueues remediation job asynchronously               │
 └─────────────────────────┬───────────────────────────────┘
@@ -127,10 +127,10 @@ Build a production-grade, event-driven automation system that:
 | WH-02 | Validate GitHub webhook signature using HMAC-SHA256 and shared secret | Must Have |
 | WH-03 | Return HTTP 200 immediately before processing — webhook delivery must not time out | Must Have |
 | WH-04 | Filter events — only process `issues.opened` or `issues.labeled` events | Must Have |
-| WH-05 | Only trigger remediation for issues containing at least one configured label | Must Have |
+| WH-05 | Only trigger remediation for issues whose `type.name` matches a configured issue type | Must Have |
 | WH-06 | Process remediation jobs asynchronously — decouple from HTTP response | Must Have |
 | WH-07 | Handle malformed payloads gracefully — log and discard without crashing | Must Have |
-| WH-08 | Support configurable label list via environment variable (default: `bug,feature,task`) | Should Have |
+| WH-08 | Support configurable issue type list via `ISSUE_TYPES` environment variable (default: `bug,feature,task`) | Should Have |
 
 ---
 
@@ -182,11 +182,11 @@ Scope: Do not make changes beyond what is required to resolve this specific issu
 ```
 
 **Issue type to PR prefix mapping:**
-| Label | PR Prefix |
+| Issue Type | PR Prefix |
 |---|---|
-| `bug` | `fix:` |
-| `feature` | `feat:` |
-| `task` | `chore:` |
+| `Bug` | `fix:` |
+| `Feature` | `feat:` |
+| `Task` | `chore:` |
 
 | ID | Requirement | Priority |
 |---|---|---|
@@ -304,7 +304,7 @@ All configuration injected via environment variables:
 | `DEVIN_API_KEY` | Devin API authentication key | — | Yes |
 | `GITHUB_TOKEN` | GitHub personal access token for PR operations | — | Yes |
 | `REPOSITORY_URL` | Target GitHub repository URL | — | Yes |
-| `ISSUE_LABELS` | Comma-separated list of issue labels that trigger remediation | `bug,feature,task` | No |
+| `ISSUE_TYPES` | Comma-separated list of GitHub issue types that trigger remediation | `bug,feature,task` | No |
 | `POLLING_INTERVAL_SECONDS` | How often to poll Devin session status | `30` | No |
 | `SESSION_TIMEOUT_MINUTES` | Max session duration before marking timed out | `45` | No |
 | `DATABASE_PATH` | Path to SQLite database file | `/data/sessions.db` | No |
@@ -331,7 +331,7 @@ The system is considered production-ready when:
 
 | Criteria | Measurement |
 |---|---|
-| Event triggering | A GitHub issue labelled `bug`, `feature`, or `task` triggers a Devin session within 60 seconds — without manual intervention |
+| Event triggering | A GitHub issue with type `Bug`, `Feature`, or `Task` triggers a Devin session within 60 seconds — without manual intervention |
 | Remediation quality | Devin successfully opens a pull request with a fix and tests in ≥ 70% of triggered sessions |
 | Idempotency | Creating the same issue twice does not create duplicate sessions |
 | Observability | Dashboard accurately reflects all session states and PR outcomes in real time |
@@ -360,8 +360,11 @@ The system is considered production-ready when:
 ## Changelog
 
 ### v1.1 (April 2026)
-- **Expanded issue type support**: System now handles `bug`, `feature`, and `task` labels (previously only `vulnerability`)
-- **Multi-label configuration**: `VULNERABILITY_LABEL` replaced by `ISSUE_LABELS` (comma-separated)
+- **Issue type filtering**: System now filters by GitHub's native issue type field (`issue.type.name`) instead of labels. Supports `Bug`, `Feature`, and `Task`.
+- **Replaced `VULNERABILITY_LABEL`** with `ISSUE_TYPES` environment variable (comma-separated list of type names)
 - **Type-aware prompts**: Prompt builder maps issue types to conventional commit prefixes (`fix:`, `feat:`, `chore:`)
 - **GitHub Actions CI**: Added lint (ruff), test (pytest), and Docker build jobs
 - **Updated PRD to v1.1** reflecting expanded scope
+
+### v1.0 (April 2026)
+- Initial release — vulnerability-only label filtering

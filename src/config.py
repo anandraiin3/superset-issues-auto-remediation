@@ -3,9 +3,9 @@
 import os
 
 
-def _parse_labels(raw: str) -> list[str]:
-    """Parse a comma-separated label string into a list of trimmed names."""
-    return [label.strip() for label in raw.split(",") if label.strip()]
+def _parse_csv(raw: str) -> list[str]:
+    """Parse a comma-separated string into a list of trimmed, lowercased names."""
+    return [item.strip().lower() for item in raw.split(",") if item.strip()]
 
 
 class Config:
@@ -16,10 +16,11 @@ class Config:
     GITHUB_TOKEN: str = os.environ.get("GITHUB_TOKEN", "")
     REPOSITORY_URL: str = os.environ.get("REPOSITORY_URL", "")
 
-    # Comma-separated list of issue labels that trigger remediation.
-    # Supports all standard GitHub issue types: bug, feature, task, etc.
-    ISSUE_LABELS: list[str] = _parse_labels(
-        os.environ.get("ISSUE_LABELS", "bug,feature,task")
+    # Comma-separated list of GitHub issue types that trigger remediation.
+    # Uses the native GitHub issue type field (issue.type.name).
+    # Default: Bug, Feature, Task — all standard GitHub issue types.
+    ISSUE_TYPES: list[str] = _parse_csv(
+        os.environ.get("ISSUE_TYPES", "bug,feature,task")
     )
     POLLING_INTERVAL_SECONDS: int = int(
         os.environ.get("POLLING_INTERVAL_SECONDS", "30")

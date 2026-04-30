@@ -35,9 +35,7 @@ class OrchestratorTestCase(unittest.TestCase):
             "pull_request": {"url": "https://github.com/test/repo/pull/1"},
         }
 
-        remediate_issue(
-            "https://github.com/test/repo", 1, "XSS bug", "details", ["bug"]
-        )
+        remediate_issue("https://github.com/test/repo", 1, "XSS bug", "details", "bug")
 
         mock_create.assert_called_once()
         mock_poll.assert_called_once()
@@ -54,9 +52,9 @@ class OrchestratorTestCase(unittest.TestCase):
         mock_poll.return_value = {"status_enum": "finished", "pull_request": None}
 
         # First call creates session
-        remediate_issue("https://github.com/test/repo", 50, "Bug", "body", ["bug"])
+        remediate_issue("https://github.com/test/repo", 50, "Bug", "body", "bug")
         # Second call should skip
-        remediate_issue("https://github.com/test/repo", 50, "Bug", "body", ["bug"])
+        remediate_issue("https://github.com/test/repo", 50, "Bug", "body", "bug")
 
         self.assertEqual(mock_create.call_count, 1)
 
@@ -71,7 +69,7 @@ class OrchestratorTestCase(unittest.TestCase):
         }
         mock_poll.return_value = {"status_enum": "expired", "pull_request": None}
 
-        remediate_issue("https://github.com/test/repo", 60, "Bug", "body", ["feature"])
+        remediate_issue("https://github.com/test/repo", 60, "Bug", "body", "feature")
         mock_poll.assert_called_once()
 
 

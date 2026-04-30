@@ -1,14 +1,14 @@
 """GitHub webhook listener.
 
 WH-01 – WH-08: Accepts POST on /webhook, validates HMAC-SHA256
-signature, filters for configured issue labels (bug, feature, task,
-etc.), and dispatches remediation asynchronously.
+signature, filters by GitHub issue type (Bug, Feature, Task),
+and dispatches remediation asynchronously.
 """
 
 import hashlib
 import hmac
 import threading
-from typing import Any, Optional
+from typing import Any
 
 from flask import Blueprint, Response, request
 
@@ -40,33 +40,33 @@ def _process_job(
     issue_number: int,
     issue_title: str,
     issue_body: str,
-    issue_labels: list[str],
+    issue_type: str,
 ) -> None:
     """Run remediation in a daemon thread (WH-06)."""
     thread = threading.Thread(
         target=remediate_issue,
-        args=(repo_url, issue_number, issue_title, issue_body, issue_labels),
+        args=(repo_url, issue_number, issue_title, issue_body, issue_type),
         daemon=True,
     )
     thread.start()
     logger.info(
-        f"Dispatched remediation thread for issue #{issue_number}",
+        f"Dispatched remediation thread for issue #{issue_number} (type={issue_type})",
         extra={"issue_number": issue_number, "event_type": "job_dispatched"},
     )
 
 
-def _get_matching_labels(issue: dict[str, Any]) -> list[str]:
-    """Return the list of issue label names that match configured labels."""
-    labels = issue.get("labels", [])
-    issue_label_names = [lbl.get("name", "") for lbl in labels]
-    return [name for name in issue_label_names if name in Config.ISSUE_LABELS]
+def _get_issue_type(issue: dict[str, Any]) -> str | None:
+    """Extract the GitHub issue type name from the issue payload.
 
-
-def _get_issue_type(labels: list[str]) -> Optional[str]:
-    """Derive the primary issue type from matched labels."""
-    if not labels:
-        return None
-    return labels[0]
+    GitHub issue types are a native first-class field:
+      issue.type = {"id": ..., "name": "Bug", "description": ...}
+    Returns the lowercased type name, or None if not set.
+    """
+    type_obj = issue.get("type")
+    if type_obj and isinstance(type_obj, dict):
+        name = type_obj.get("name", "")
+        return name.lower() if name else None
+    return None
 
 
 @webhook_bp.route("/webhook", methods=["POST"])
@@ -113,15 +113,15 @@ def handle_webhook() -> tuple[Response, int]:
     if not issue:
         return Response("OK", status=200)
 
-    # WH-05 / WH-08: Only trigger for issues with at least one configured label
-    matching_labels = _get_matching_labels(issue)
-    if not matching_labels:
+    # WH-05 / WH-08: Only trigger for issues whose type matches configured types
+    issue_type = _get_issue_type(issue)
+    if issue_type is None or issue_type not in Config.ISSUE_TYPES:
         logger.info(
-            f"Issue #{issue.get('number')} has no matching labels "
-            f"(configured: {Config.ISSUE_LABELS}) — skipping",
+            f"Issue #{issue.get('number')} type '{issue_type}' not in "
+            f"configured types {Config.ISSUE_TYPES} — skipping",
             extra={
                 "issue_number": issue.get("number"),
-                "event_type": "label_missing",
+                "event_type": "type_filtered",
             },
         )
         return Response("OK", status=200)
@@ -132,12 +132,12 @@ def handle_webhook() -> tuple[Response, int]:
     issue_body: str = issue.get("body", "") or ""
 
     logger.info(
-        f"Accepted issue #{issue_number}: {issue_title} (labels: {matching_labels})",
+        f"Accepted issue #{issue_number}: {issue_title} (type={issue_type})",
         extra={"issue_number": issue_number, "event_type": "issue_accepted"},
     )
 
     # WH-06: Asynchronous processing
-    _process_job(repo_url, issue_number, issue_title, issue_body, matching_labels)
+    _process_job(repo_url, issue_number, issue_title, issue_body, issue_type)
 
     # WH-03: Return 200 immediately
     return Response("OK", status=200)

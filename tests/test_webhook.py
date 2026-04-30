@@ -16,6 +16,11 @@ os.environ.setdefault("DATABASE_PATH", ":memory:")
 from app import create_app
 
 
+def _make_issue_type(name: str) -> dict:
+    """Build a GitHub issue type object as it appears in webhook payloads."""
+    return {"id": 1, "node_id": "IT_fake", "name": name, "description": ""}
+
+
 class WebhookTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.app = create_app()
@@ -61,21 +66,7 @@ class WebhookTestCase(unittest.TestCase):
         resp = self._post_webhook({"action": "created"}, event="push")
         self.assertEqual(resp.status_code, 200)
 
-    def test_issue_without_matching_label_returns_200(self) -> None:
-        payload = {
-            "action": "opened",
-            "issue": {
-                "number": 1,
-                "title": "Test issue",
-                "body": "desc",
-                "labels": [{"name": "wontfix"}],
-            },
-            "repository": {"html_url": "https://github.com/test/repo"},
-        }
-        resp = self._post_webhook(payload)
-        self.assertEqual(resp.status_code, 200)
-
-    def test_issue_with_no_labels_returns_200(self) -> None:
+    def test_issue_without_type_returns_200(self) -> None:
         payload = {
             "action": "opened",
             "issue": {
@@ -89,15 +80,31 @@ class WebhookTestCase(unittest.TestCase):
         resp = self._post_webhook(payload)
         self.assertEqual(resp.status_code, 200)
 
+    def test_issue_with_unsupported_type_returns_200(self) -> None:
+        payload = {
+            "action": "opened",
+            "issue": {
+                "number": 2,
+                "title": "Test issue",
+                "body": "desc",
+                "labels": [],
+                "type": _make_issue_type("Epic"),
+            },
+            "repository": {"html_url": "https://github.com/test/repo"},
+        }
+        resp = self._post_webhook(payload)
+        self.assertEqual(resp.status_code, 200)
+
     @patch("src.webhook.remediate_issue")
-    def test_bug_label_triggers_remediation(self, mock_remediate) -> None:
+    def test_bug_type_triggers_remediation(self, mock_remediate) -> None:
         payload = {
             "action": "opened",
             "issue": {
                 "number": 42,
                 "title": "XSS in login",
                 "body": "details...",
-                "labels": [{"name": "bug"}],
+                "labels": [],
+                "type": _make_issue_type("Bug"),
             },
             "repository": {"html_url": "https://github.com/test/repo"},
         }
@@ -105,14 +112,15 @@ class WebhookTestCase(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
 
     @patch("src.webhook.remediate_issue")
-    def test_feature_label_triggers_remediation(self, mock_remediate) -> None:
+    def test_feature_type_triggers_remediation(self, mock_remediate) -> None:
         payload = {
             "action": "opened",
             "issue": {
                 "number": 43,
                 "title": "Add dark mode",
                 "body": "details...",
-                "labels": [{"name": "feature"}],
+                "labels": [],
+                "type": _make_issue_type("Feature"),
             },
             "repository": {"html_url": "https://github.com/test/repo"},
         }
@@ -120,14 +128,15 @@ class WebhookTestCase(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
 
     @patch("src.webhook.remediate_issue")
-    def test_task_label_triggers_remediation(self, mock_remediate) -> None:
+    def test_task_type_triggers_remediation(self, mock_remediate) -> None:
         payload = {
             "action": "labeled",
             "issue": {
                 "number": 44,
                 "title": "Update dependencies",
                 "body": "details...",
-                "labels": [{"name": "task"}],
+                "labels": [],
+                "type": _make_issue_type("Task"),
             },
             "repository": {"html_url": "https://github.com/test/repo"},
         }
@@ -150,7 +159,8 @@ class WebhookTestCase(unittest.TestCase):
                 "number": 1,
                 "title": "Test",
                 "body": "",
-                "labels": [{"name": "bug"}],
+                "labels": [],
+                "type": _make_issue_type("Bug"),
             },
             "repository": {"html_url": "https://github.com/test/repo"},
         }

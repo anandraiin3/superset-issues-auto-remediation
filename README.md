@@ -1,11 +1,11 @@
 # Superset Issues Auto-Remediation
 
-Event-driven issue remediation system that automatically detects GitHub issues labelled with configured types (`bug`, `feature`, `task`) and triggers [Devin AI](https://devin.ai) sessions to analyse, implement, and open pull requests.
+Event-driven issue remediation system that automatically detects GitHub issues by their native **issue type** (`Bug`, `Feature`, `Task`) and triggers [Devin AI](https://devin.ai) sessions to analyse, implement, and open pull requests.
 
 ## Architecture
 
 ```
-GitHub Issue (labels: bug, feature, task)
+GitHub Issue (type: Bug / Feature / Task)
         │ Webhook POST
         ▼
   Webhook Listener ──► Remediation Orchestrator ──► Devin API
@@ -48,6 +48,12 @@ The system is now:
 5. Select **Let me select individual events** → check **Issues**
 6. Save
 
+### 4. Enable Issue Types
+
+Issue types (`Bug`, `Feature`, `Task`) are a native GitHub feature. To enable them:
+1. Go to your **Organization Settings → Issue Types**
+2. Ensure the desired types are enabled
+
 ## Configuration
 
 All configuration is injected via environment variables:
@@ -58,7 +64,7 @@ All configuration is injected via environment variables:
 | `DEVIN_API_KEY` | Devin API authentication key | — | Yes |
 | `GITHUB_TOKEN` | GitHub personal access token | — | No |
 | `REPOSITORY_URL` | Target GitHub repository URL | — | Yes |
-| `ISSUE_LABELS` | Comma-separated list of issue labels that trigger remediation | `bug,feature,task` | No |
+| `ISSUE_TYPES` | Comma-separated list of GitHub issue types that trigger remediation | `bug,feature,task` | No |
 | `POLLING_INTERVAL_SECONDS` | Devin session poll interval | `30` | No |
 | `SESSION_TIMEOUT_MINUTES` | Max session duration before timeout | `45` | No |
 | `DATABASE_PATH` | SQLite database file path | `/data/sessions.db` | No |
@@ -66,21 +72,21 @@ All configuration is injected via environment variables:
 
 ## Supported Issue Types
 
-The system supports all standard GitHub issue types:
+The system uses GitHub's native [issue types](https://docs.github.com/en/issues/tracking-your-work-with-issues/configuring-issues/managing-issue-types-in-an-organization) (not labels) to classify and process issues:
 
-| Label | PR Prefix | Description |
+| Issue Type | PR Prefix | Description |
 |---|---|---|
-| `bug` | `fix:` | Bug fixes and error corrections |
-| `feature` | `feat:` | New features and enhancements |
-| `task` | `chore:` | Maintenance tasks, dependency updates, refactoring |
+| `Bug` | `fix:` | Bug fixes and error corrections |
+| `Feature` | `feat:` | New features and enhancements |
+| `Task` | `chore:` | Maintenance tasks, dependency updates, refactoring |
 
-Labels are configurable via the `ISSUE_LABELS` environment variable (comma-separated).
+The webhook reads the `issue.type.name` field from the GitHub webhook payload. Issues without a type or with an unsupported type are skipped.
 
 ## How It Works
 
 1. **Webhook received** — GitHub sends a POST when an issue is created or labelled
 2. **Signature validated** — HMAC-SHA256 verification ensures the payload is authentic
-3. **Label matched** — Only issues with at least one configured label proceed
+3. **Issue type checked** — Only issues whose `type.name` matches a configured type proceed
 4. **Idempotency check** — Duplicate issues are detected and skipped
 5. **Devin session created** — A structured prompt with issue context and type is sent to the Devin API
 6. **Session polled** — The orchestrator polls session status until completion, failure, or timeout
@@ -92,7 +98,7 @@ Labels are configurable via the `ISSUE_LABELS` environment variable (comma-separ
 The project uses GitHub Actions for continuous integration:
 
 - **Lint** — `ruff check` and `ruff format --check` on all Python files
-- **Test** — `pytest` runs all 26 tests
+- **Test** — `pytest` runs all tests
 - **Docker build** — Verifies the Docker image builds successfully
 
 CI runs on every push to `main` and on all pull requests.
