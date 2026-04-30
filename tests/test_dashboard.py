@@ -5,6 +5,7 @@ import unittest
 
 os.environ.setdefault("GITHUB_WEBHOOK_SECRET", "test-secret")
 os.environ.setdefault("DEVIN_API_KEY", "test-key")
+os.environ.setdefault("DEVIN_ORG_ID", "test-org")
 os.environ.setdefault("REPOSITORY_URL", "https://github.com/test/repo")
 os.environ.setdefault("DATABASE_PATH", ":memory:")
 

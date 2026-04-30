@@ -8,6 +8,7 @@ services:
     environment:
       - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
       - DEVIN_API_KEY=${DEVIN_API_KEY}
+      - DEVIN_ORG_ID=${DEVIN_ORG_ID}
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - REPOSITORY_URL=${REPOSITORY_URL}
       - ISSUE_TYPES=${ISSUE_TYPES:-bug,feature,task}

@@ -8,7 +8,7 @@ Event-driven issue remediation system that automatically detects GitHub issues b
 GitHub Issue (type: Bug / Feature / Task)
         │ Webhook POST
         ▼
-  Webhook Listener ──► Remediation Orchestrator ──► Devin API
+  Webhook Listener ──► Remediation Orchestrator ──► Devin API v3
         │                       │
         ▼                       ▼
     HTTP 200              SQLite Store
@@ -61,7 +61,8 @@ All configuration is injected via environment variables:
 | Variable | Description | Default | Required |
 |---|---|---|---|
 | `GITHUB_WEBHOOK_SECRET` | Shared secret for HMAC-SHA256 signature validation | — | Yes |
-| `DEVIN_API_KEY` | Devin API authentication key | — | Yes |
+| `DEVIN_API_KEY` | Devin API key (service user, `cog_` prefix) | — | Yes |
+| `DEVIN_ORG_ID` | Devin organisation ID (Settings → Service Users) | — | Yes |
 | `GITHUB_TOKEN` | GitHub personal access token | — | No |
 | `REPOSITORY_URL` | Target GitHub repository URL | — | Yes |
 | `ISSUE_TYPES` | Comma-separated list of GitHub issue types that trigger remediation | `bug,feature,task` | No |
@@ -88,7 +89,7 @@ The webhook reads the `issue.type.name` field from the GitHub webhook payload. I
 2. **Signature validated** — HMAC-SHA256 verification ensures the payload is authentic
 3. **Issue type checked** — Only issues whose `type.name` matches a configured type proceed
 4. **Idempotency check** — Duplicate issues are detected and skipped
-5. **Devin session created** — A structured prompt with issue context and type is sent to the Devin API
+5. **Devin session created** — A structured prompt with issue context and type is sent to the Devin API v3
 6. **Session polled** — The orchestrator polls session status until completion, failure, or timeout
 7. **Result recorded** — PR URL, status, and timing metrics are persisted to SQLite
 8. **Dashboard updated** — Real-time view of all remediation sessions
@@ -115,6 +116,7 @@ pip install -r requirements.txt
 # Export required env vars
 export GITHUB_WEBHOOK_SECRET=your_secret
 export DEVIN_API_KEY=your_key
+export DEVIN_ORG_ID=your_org_id
 export REPOSITORY_URL=https://github.com/your/repo
 export DATABASE_PATH=./data/sessions.db
 
@@ -162,7 +164,7 @@ The dashboard auto-refreshes every 30 seconds.
 |---|---|
 | Webhook listener | Python + Flask |
 | Async processing | Python threading |
-| Session manager | Python + requests |
+| Session manager | Python + requests (Devin API v3) |
 | Observability store | SQLite |
 | Dashboard | Flask + Jinja2 |
 | Containerisation | Docker + docker-compose |

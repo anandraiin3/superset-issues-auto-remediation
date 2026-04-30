@@ -1,7 +1,7 @@
 # Product Requirements Document
 ## Event-Driven Issue Remediation System
 **Author:** Anand Rai
-**Version:** 1.1
+**Version:** 1.2
 **Date:** April 2026
 **Status:** Draft
 
@@ -44,10 +44,10 @@ Build a production-grade, event-driven automation system that:
 
 ## 4. Scope
 
-### In Scope — Version 1.1
+### In Scope — Version 1.2
 - Webhook listener triggered by GitHub issue creation, filtered by native issue type (default: `Bug`, `Feature`, `Task`)
 - Support for all standard GitHub issue types via the `issue.type` field in webhook payloads
-- AI agent session manager — creates, monitors, and tracks remediation sessions via Devin API
+- AI agent session manager — creates, monitors, and tracks remediation sessions via Devin API v3
 - Idempotent session handling — prevents duplicate remediations for the same issue
 - Observability layer — logs session lifecycle, PR output, success/failure signals, time-to-remediation
 - Operational dashboard — real-time view of system health and remediation throughput
@@ -87,7 +87,7 @@ Build a production-grade, event-driven automation system that:
 │              Remediation Orchestrator                    │
 │  • Checks idempotency — skip if session already exists   │
 │  • Builds structured prompt from issue context           │
-│  • Calls Devin API to create session                     │
+│  • Calls Devin API v3 to create session                  │
 │  • Polls session status until terminal state             │
 │  • Extracts PR URL from completed session                │
 │  • Handles failures gracefully with retry logic          │
@@ -95,7 +95,7 @@ Build a production-grade, event-driven automation system that:
                │                      │
                ▼                      ▼
 ┌──────────────────────┐   ┌──────────────────────────────┐
-│     Devin API        │   │      Observability Store      │
+│     Devin API v3     │   │      Observability Store      │
 │   (External)         │   │  • SQLite session log         │
 │                      │   │  • Lifecycle timestamps        │
 │  Analyses issue      │   │  • Status transitions         │
@@ -140,8 +140,8 @@ Build a production-grade, event-driven automation system that:
 |---|---|---|
 | RO-01 | Check idempotency before creating a session — if a session already exists for this issue number, skip | Must Have |
 | RO-02 | Build structured prompt from issue context: repository URL, issue number, title, body | Must Have |
-| RO-03 | Call Devin API to create a new remediation session | Must Have |
-| RO-04 | Pass `idempotent_client_id` keyed on issue number to prevent duplicate Devin sessions | Must Have |
+| RO-03 | Call Devin API v3 to create a new remediation session (`POST /v3/organizations/{org_id}/sessions`) | Must Have |
+| RO-04 | Idempotency handled at the application level via DB check (v3 does not expose an idempotent flag) | Must Have |
 | RO-05 | Poll session status at configurable interval (default: 30 seconds) until terminal state | Must Have |
 | RO-06 | Extract pull request URL from completed session output | Must Have |
 | RO-07 | Handle session failure — log error details, do not retry automatically in v1.0 | Must Have |
@@ -355,7 +355,8 @@ All configuration injected via environment variables:
 | Variable | Description | Default | Required |
 |---|---|---|---|
 | `GITHUB_WEBHOOK_SECRET` | Shared secret for webhook signature validation | — | Yes |
-| `DEVIN_API_KEY` | Devin API authentication key | — | Yes |
+| `DEVIN_API_KEY` | Devin API key (service user, `cog_` prefix) | — | Yes |
+| `DEVIN_ORG_ID` | Devin organisation ID (Settings → Service Users) | — | Yes |
 | `GITHUB_TOKEN` | GitHub personal access token for PR operations | — | Yes |
 | `REPOSITORY_URL` | Target GitHub repository URL | — | Yes |
 | `ISSUE_TYPES` | Comma-separated list of GitHub issue types that trigger remediation | `bug,feature,task` | No |
@@ -372,7 +373,7 @@ All configuration injected via environment variables:
 |---|---|---|
 | Webhook listener | Python + Flask | Lightweight, fast to build, production-proven for webhook handling |
 | Async processing | Python threading / queue | Decouples webhook response from processing without complex infrastructure |
-| Session manager | Python + requests | Clean HTTP client for Devin API calls |
+| Session manager | Python + requests | Clean HTTP client for Devin API v3 calls |
 | Observability store | SQLite | Zero-dependency, sufficient for single-repository scale, durable |
 | Dashboard | Flask + Jinja2 | Simple server-rendered HTML, no frontend build step required |
 | Containerisation | Docker + docker-compose | Reproducible, portable, single-command deployment |
@@ -407,11 +408,18 @@ The system is considered production-ready when:
 
 ---
 
-*PRD Version 1.1 — Anand Rai — April 2026*
+*PRD Version 1.2 — Anand Rai — April 2026*
 
 ---
 
 ## Changelog
+
+### v1.2 (April 2026)
+- **Devin API v3 migration**: All API calls now use Devin API v3 (`/v3/organizations/{org_id}/sessions`). v1/v2 endpoints are no longer used.
+- **New required config `DEVIN_ORG_ID`**: Organisation ID is now required for all Devin API calls (find it at Settings → Service Users)
+- **Updated session response handling**: v3 returns `status`/`status_detail` (replacing `status_enum`) and `pull_requests` array (replacing single `pull_request` object)
+- **Updated terminal statuses**: Session completion is now `status=exit, status_detail=finished`; failure states are `error` and `suspended`
+- **Application-level idempotency**: v3 does not expose an `idempotent` flag; duplicate prevention handled entirely via DB check
 
 ### v1.1 (April 2026)
 - **Issue type filtering**: System now filters by GitHub's native issue type field (`issue.type.name`) instead of labels. Supports `Bug`, `Feature`, and `Task`.

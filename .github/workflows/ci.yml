@@ -23,6 +23,7 @@ jobs:
     env:
       GITHUB_WEBHOOK_SECRET: test-secret
       DEVIN_API_KEY: test-key
+      DEVIN_ORG_ID: test-org
       REPOSITORY_URL: https://github.com/test/repo
       DATABASE_PATH: ":memory:"
       POLLING_INTERVAL_SECONDS: "0"

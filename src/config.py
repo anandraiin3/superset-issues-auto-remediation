@@ -13,6 +13,7 @@ class Config:
 
     GITHUB_WEBHOOK_SECRET: str = os.environ.get("GITHUB_WEBHOOK_SECRET", "")
     DEVIN_API_KEY: str = os.environ.get("DEVIN_API_KEY", "")
+    DEVIN_ORG_ID: str = os.environ.get("DEVIN_ORG_ID", "")
     GITHUB_TOKEN: str = os.environ.get("GITHUB_TOKEN", "")
     REPOSITORY_URL: str = os.environ.get("REPOSITORY_URL", "")
 
@@ -33,7 +34,12 @@ class Config:
     def validate(cls) -> list[str]:
         """Return a list of missing required config keys."""
         missing: list[str] = []
-        for key in ("GITHUB_WEBHOOK_SECRET", "DEVIN_API_KEY", "REPOSITORY_URL"):
+        for key in (
+            "GITHUB_WEBHOOK_SECRET",
+            "DEVIN_API_KEY",
+            "DEVIN_ORG_ID",
+            "REPOSITORY_URL",
+        ):
             if not getattr(cls, key):
                 missing.append(key)
         return missing

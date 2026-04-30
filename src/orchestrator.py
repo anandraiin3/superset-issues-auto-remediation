@@ -1,8 +1,10 @@
 """Remediation orchestrator — manages Devin session lifecycle.
 
-RO-01 – RO-11: Creates sessions via Devin API, polls until terminal
+RO-01 – RO-11: Creates sessions via Devin API **v3**, polls until terminal
 state, extracts PR URL, and handles timeouts / failures.  Supports
 all GitHub issue types (bug, feature, task).
+
+API reference: https://docs.devin.ai/api-reference/overview
 """
 
 import time
@@ -23,8 +25,14 @@ logger = get_logger(__name__)
 
 DEVIN_API_BASE = "https://api.devin.ai"
 
-TERMINAL_STATUSES = {"finished", "expired"}
-ACTIVE_STATUSES = {"working", "blocked", "resumed"}
+# v3 terminal statuses — the session will not transition further.
+# "exit" = completed (check status_detail for "finished"),
+# "error" = unrecoverable error,
+# "suspended" = paused (inactivity, user request, usage limit, etc.)
+TERMINAL_STATUSES = {"exit", "error", "suspended"}
+
+# v3 running sub-states (status_detail when status == "running")
+ACTIVE_DETAILS = {"working", "waiting_for_user", "waiting_for_approval"}
 
 
 def _headers() -> dict[str, str]:
@@ -34,22 +42,31 @@ def _headers() -> dict[str, str]:
     }
 
 
+def _sessions_url() -> str:
+    """Build the v3 sessions endpoint URL for the configured organisation."""
+    return f"{DEVIN_API_BASE}/v3/organizations/{Config.DEVIN_ORG_ID}/sessions"
+
+
 def _create_devin_session(
     prompt: str,
     issue_number: int,
     issue_title: str,
     issue_type: str = "task",
 ) -> dict:
-    """Call Devin API to create a new session (RO-03 / RO-04)."""
-    payload = {
+    """Call Devin API v3 to create a new session (RO-03 / RO-04).
+
+    v3 endpoint: POST /v3/organizations/{org_id}/sessions
+    Idempotency is handled at the application level (DB check in
+    remediate_issue) since v3 does not expose an idempotent flag.
+    """
+    payload: dict = {
         "prompt": prompt,
-        "idempotent": True,
         "title": f"Resolve #{issue_number} [{issue_type}]: {issue_title}",
         "tags": ["auto-remediation", f"issue-{issue_number}", issue_type],
     }
 
     resp = requests.post(
-        f"{DEVIN_API_BASE}/v1/sessions",
+        _sessions_url(),
         json=payload,
         headers=_headers(),
         timeout=30,
@@ -59,9 +76,12 @@ def _create_devin_session(
 
 
 def _poll_session(session_id: str) -> dict:
-    """Retrieve current session details from Devin API (RO-05)."""
+    """Retrieve current session details from Devin API v3 (RO-05).
+
+    v3 endpoint: GET /v3/organizations/{org_id}/sessions/{session_id}
+    """
     resp = requests.get(
-        f"{DEVIN_API_BASE}/v1/sessions/{session_id}",
+        f"{_sessions_url()}/{session_id}",
         headers=_headers(),
         timeout=30,
     )
@@ -70,10 +90,17 @@ def _poll_session(session_id: str) -> dict:
 
 
 def _extract_pr_url(session_data: dict) -> Optional[str]:
-    """Extract PR URL from session response (RO-06)."""
-    pr_info = session_data.get("pull_request")
-    if pr_info and isinstance(pr_info, dict):
-        return pr_info.get("url")
+    """Extract the first PR URL from session response (RO-06).
+
+    v3 returns ``pull_requests``: a list of ``{pr_url, pr_state}`` objects
+    (changed from v1's single ``pull_request.url``).
+    """
+    prs = session_data.get("pull_requests")
+    if prs and isinstance(prs, list):
+        for pr in prs:
+            url = pr.get("pr_url")
+            if url:
+                return url
     return None
 
 
@@ -105,7 +132,7 @@ def remediate_issue(
             repo_url, issue_number, issue_title, issue_body, issue_type
         )
 
-        # RO-03 / RO-04: Create Devin session
+        # RO-03 / RO-04: Create Devin session (v3)
         logger.info(
             f"Creating Devin session for issue #{issue_number} (type={issue_type})",
             extra={**log_extra, "event_type": "session_creating"},
@@ -155,13 +182,15 @@ def remediate_issue(
                 )
                 continue
 
-            status_enum = session_data.get("status_enum", "")
+            status = session_data.get("status", "")
+            status_detail = session_data.get("status_detail", "")
             logger.info(
-                f"Session {session_id} status: {status_enum}",
+                f"Session {session_id} status: {status} (detail: {status_detail})",
                 extra={**log_extra, "event_type": "poll_status"},
             )
 
-            if status_enum == "finished":
+            # v3: "exit" with status_detail "finished" means task completed
+            if status == "exit" and status_detail == "finished":
                 pr_url = _extract_pr_url(session_data)
                 update_session_status(session_id, "completed", pr_url=pr_url)
                 logger.info(
@@ -170,24 +199,32 @@ def remediate_issue(
                 )
                 return
 
-            if status_enum in ("expired",):
+            # v3: "error" or "suspended" are terminal failure states
+            if status in ("error", "suspended"):
+                reason = status_detail or status
                 update_session_status(
                     session_id,
                     "failed",
-                    error_message=f"Devin session reached terminal status: {status_enum}",
+                    error_message=f"Devin session reached terminal status: {status} ({reason})",
                     error_type="devin_terminal",
                 )
                 logger.warning(
-                    f"Session {session_id} ended with status: {status_enum}",
+                    f"Session {session_id} ended with status: {status} ({reason})",
                     extra={**log_extra, "event_type": "session_failed"},
                 )
                 return
 
-            if status_enum not in ACTIVE_STATUSES:
+            # v3: "exit" without "finished" is also terminal
+            if status == "exit":
+                pr_url = _extract_pr_url(session_data)
+                update_session_status(session_id, "completed", pr_url=pr_url)
                 logger.info(
-                    f"Session {session_id} in non-active status: {status_enum}",
-                    extra={**log_extra, "event_type": "poll_status_unknown"},
+                    f"Session {session_id} exited (detail: {status_detail}) — PR: {pr_url or 'none'}",
+                    extra={**log_extra, "event_type": "session_completed"},
                 )
+                return
+
+            # Non-terminal: new, creating, claimed, running, resuming — keep polling
 
     except requests.HTTPError as exc:
         logger.error(
