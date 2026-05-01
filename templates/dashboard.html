@@ -168,6 +168,10 @@
             <div class="label">Avg Time to Remediation</div>
             <div class="value">{{ stats.avg_ttr_seconds }}s</div>
         </div>
+        <div class="stat-card">
+            <div class="label">Total Cost</div>
+            <div class="value blue">{{ stats.total_cost_acus }} ACUs</div>
+        </div>
     </div>
 
     <!-- DB-08: Status filter -->
@@ -190,6 +194,7 @@
                 <th>Status</th>
                 <th>PR</th>
                 <th>Devin</th>
+                <th>Cost (ACUs)</th>
                 <th>Created</th>
                 <th>Duration</th>
             </tr>
@@ -197,7 +202,7 @@
         <tbody>
             {% for s in sessions %}
             <tr>
-                <td>#{{ s.issue_number }}</td>
+                <td><a href="{{ s.repository_url }}/issues/{{ s.issue_number }}" target="_blank" rel="noopener">#{{ s.issue_number }}</a></td>
                 <td>{{ s.issue_title }}</td>
                 <td>
                     <span class="badge badge-{{ s.status }}">{{ s.status }}</span>
@@ -217,6 +222,13 @@
                 <td>
                     {% if s.devin_url %}
                         <a href="{{ s.devin_url }}" target="_blank" rel="noopener">Session</a>
+                    {% else %}
+                        <span style="color: var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if s.acus_consumed %}
+                        {{ s.acus_consumed }}
                     {% else %}
                         <span style="color: var(--text-muted);">—</span>
                     {% endif %}

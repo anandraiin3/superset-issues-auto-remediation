@@ -1,7 +1,7 @@
 # Product Requirements Document
 ## Event-Driven Issue Remediation System
 **Author:** Anand Rai
-**Version:** 1.3
+**Version:** 1.4
 **Date:** April 2026
 **Status:** Draft
 
@@ -44,7 +44,7 @@ Build a production-grade, event-driven automation system that:
 
 ## 4. Scope
 
-### In Scope — Version 1.3
+### In Scope — Version 1.4
 - Webhook listener triggered by GitHub issue creation, filtered by native issue type (default: `Bug`, `Feature`, `Task`)
 - Support for all standard GitHub issue types via the `issue.type` field in webhook payloads
 - AI agent session manager — creates, monitors, and tracks remediation sessions via Devin API v3
@@ -52,8 +52,12 @@ Build a production-grade, event-driven automation system that:
 - **Granular status tracking** — dashboard shows Devin session sub-states (`working`, `waiting_for_user`, `waiting_for_approval`, `pr_ready`, `finished`)
 - **Auto-post Devin questions to GitHub issues** — when Devin is waiting for user input on an issue-related question, the question is automatically posted as a comment on the GitHub issue
 - **Infrastructure vs issue-related classification** — infrastructure questions (permissions, tokens, access) are filtered out and NOT posted to GitHub
+- **Clickable issue links** — issue numbers on the dashboard link directly to the GitHub issue page
+- **Clickable PR links** — PR column links directly to the pull request on GitHub
+- **Devin session links** — dashboard provides direct links to each Devin session in the AI agent interface
+- **Cost / ACU tracking** — each session records its ACU consumption from the Devin API; dashboard shows per-session cost and total cost across all sessions
 - Observability layer — logs session lifecycle, PR output, success/failure signals, time-to-remediation
-- Operational dashboard — real-time view of system health, remediation throughput, and Devin session links
+- Operational dashboard — real-time view of system health, remediation throughput, cost, and Devin session links
 - Docker containerisation for reproducible, portable deployment
 - GitHub Actions CI pipeline (lint, test, Docker build)
 
@@ -61,7 +65,6 @@ Build a production-grade, event-driven automation system that:
 - Automatic vulnerability scanning (Snyk, Dependabot, SAST tool integration)
 - Multi-repository support
 - Slack / PagerDuty / email notifications
-- Cost-per-remediation tracking
 - AI-based severity triage before triggering remediation
 - Auto-merge of approved PRs
 - JIRA / Linear issue tracker integration
@@ -211,6 +214,8 @@ The session status machine shows all valid state transitions:
 || RO-15 | Post issue-related questions to the GitHub issue as a comment, with a link to the Devin session | Must Have |
 || RO-16 | Track `last_posted_message_id` to prevent duplicate comments for the same message | Must Have |
 || RO-17 | Set `status_detail` to `pr_ready` when a PR exists but Devin is still actively working | Should Have |
+|| RO-18 | Track `acus_consumed` from Devin API session responses during polling and persist to DB | Must Have |
+|| RO-19 | On session completion, fetch final ACU consumption from the session retrieve endpoint | Must Have |
 
 ---
 
@@ -328,6 +333,7 @@ Scope: Do not make changes beyond what is required to complete this task.
 || OB-08 | Store `status_detail` for granular sub-state tracking (working, waiting_for_user, waiting_for_approval, pr_ready, finished) | Must Have |
 || OB-09 | Store `devin_url` for direct links to Devin sessions | Should Have |
 || OB-10 | Store `last_posted_message_id` to de-duplicate auto-posted GitHub comments | Must Have |
+|| OB-11 | Store `acus_consumed` (REAL) to track the cost of each remediation session | Must Have |
 
 **Schema:**
 ```sql
@@ -344,13 +350,14 @@ CREATE TABLE sessions (
     error_message               TEXT,
     error_type                  TEXT,
     last_posted_message_id      TEXT,
+    acus_consumed               REAL DEFAULT 0,
     created_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at                TIMESTAMP,
     time_to_remediation_seconds INTEGER
 );
 
-CREATE INDEX idx_issue_number ON sessions(issue_number);
+CREATE UNIQUE INDEX idx_issue_number ON sessions(issue_number);
 CREATE INDEX idx_status ON sessions(status);
 ```
 
@@ -380,6 +387,9 @@ CREATE INDEX idx_status ON sessions(status);
 | DB-09 | Show session timeline — time spent in each status | Could Have |
 || DB-10 | Display granular `status_detail` below the main status badge with colour-coded styling | Must Have |
 || DB-11 | Show Devin session links for quick access to the AI agent interface | Should Have |
+|| DB-12 | Issue numbers must be clickable links to the corresponding GitHub issue page (`{repository_url}/issues/{issue_number}`) | Must Have |
+|| DB-13 | Display per-session ACU cost in a dedicated "Cost" column (shows ACU value or `—` if zero) | Must Have |
+|| DB-14 | Display total ACU cost across all sessions as a dashboard stat card | Must Have |
 
 ---
 
@@ -468,7 +478,8 @@ The system is considered production-ready when:
 | Event triggering | A GitHub issue with type `Bug`, `Feature`, or `Task` triggers a Devin session within 60 seconds — without manual intervention |
 | Remediation quality | Devin successfully opens a pull request with a fix and tests in ≥ 70% of triggered sessions |
 | Idempotency | Creating the same issue twice does not create duplicate sessions |
-| Observability | Dashboard accurately reflects all session states and PR outcomes in real time |
+| Observability | Dashboard accurately reflects all session states, PR outcomes, and cost in real time |
+| Cost visibility | Each completed session shows its ACU consumption; total cost is visible on the dashboard |
 | Portability | System starts cleanly via `docker-compose up` on a fresh machine with only API keys provided |
 | Reliability | System recovers from container restart without data loss or duplicate processing |
 
@@ -481,17 +492,27 @@ The system is considered production-ready when:
 | v1.1 | Automatic vulnerability scanning integration (Snyk, Dependabot) | Removes manual issue creation — fully autonomous pipeline |
 | v1.2 | AI-based severity triage — classify issues before triggering Devin | Prioritise critical vulnerabilities, skip low-risk issues |
 | v1.3 | Slack / PagerDuty notifications on completion and failure | Operational awareness without checking dashboard |
-| v1.4 | Multi-repository support | Scale across an organisation's full GitHub footprint |
-| v1.5 | Cost-per-remediation tracking | Build ROI case for engineering leadership |
+| v1.5 | Multi-repository support | Scale across an organisation's full GitHub footprint |
 | v2.0 | Auto-merge approved PRs with passing CI | Fully autonomous remediation pipeline — zero human touchpoints for low-risk fixes |
 
 ---
 
-*PRD Version 1.3 — Anand Rai — April 2026*
+*PRD Version 1.4 — Anand Rai — April 2026*
 
 ---
 
 ## Changelog
+
+### v1.4 (April 2026)
+- **Clickable issue links (DB-12)**: Issue numbers on the dashboard are now hyperlinks to the corresponding GitHub issue page (`{repository_url}/issues/{issue_number}`)
+- **Clickable PR links (DB-05)**: PR links verified and confirmed to open the actual pull request in a new tab
+- **Devin session links (DB-11)**: Direct links to each Devin session for quick access to the AI agent interface
+- **Cost / ACU tracking (RO-18, RO-19, OB-11, DB-13, DB-14)**: Each session records its `acus_consumed` from the Devin API v3 session response; dashboard shows per-session cost in a "Cost (ACUs)" column and a total cost stat card
+- **New DB column**: `acus_consumed REAL DEFAULT 0` added to sessions table (migration is idempotent)
+- **New requirements**: RO-18, RO-19, OB-11, DB-12 through DB-14
+- **Race condition fix**: Replaced non-atomic check-then-insert with `reserve_issue()` using UNIQUE index on `issue_number` — eliminates duplicate Devin sessions from concurrent webhooks
+- **Message dedup fix**: `_fetch_latest_devin_message` now returns `None` when the newest message was already posted, preventing infinite re-posting of old messages
+- **PRD version bumped to 1.4**; cost tracking moved from future roadmap to in-scope
 
 ### v1.3 (April 2026)
 - **Issue resolution workflow diagram (DAG)**: Added visual diagram (`docs/workflow-diagram.png`) showing the full end-to-end issue resolution process as a directed acyclic graph

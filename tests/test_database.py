@@ -85,6 +85,29 @@ class DatabaseTestCase(unittest.TestCase):
         self.assertTrue(reserve_issue(30, "Bug Z", "https://github.com/t/r"))
         self.assertFalse(reserve_issue(30, "Bug Z dup", "https://github.com/t/r"))
 
+    def test_acus_consumed_tracked(self) -> None:
+        """ACU consumption should be stored and aggregated."""
+        reserve_issue(40, "Bug ACU", "https://github.com/t/r")
+        create_session("s-040", 40, "Bug ACU", "https://github.com/t/r")
+        update_session_status("s-040", "running", acus_consumed=1.5)
+        update_session_status("s-040", "completed", acus_consumed=3.25)
+        from src.database import get_session
+
+        row = get_session("s-040")
+        self.assertIsNotNone(row)
+        self.assertEqual(row["acus_consumed"], 3.25)
+
+    def test_dashboard_stats_total_cost(self) -> None:
+        """Dashboard stats should include total_cost_acus."""
+        reserve_issue(50, "Bug C", "https://github.com/t/r")
+        create_session("s-050", 50, "Bug C", "https://github.com/t/r")
+        update_session_status("s-050", "completed", acus_consumed=2.0)
+        reserve_issue(51, "Bug D", "https://github.com/t/r")
+        create_session("s-051", 51, "Bug D", "https://github.com/t/r")
+        update_session_status("s-051", "completed", acus_consumed=1.5)
+        stats = get_dashboard_stats()
+        self.assertEqual(stats["total_cost_acus"], 3.5)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -50,6 +50,7 @@ def init_db() -> None:
             error_message               TEXT,
             error_type                  TEXT,
             last_posted_message_id      TEXT,
+            acus_consumed               REAL DEFAULT 0,
             created_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             completed_at                TIMESTAMP,
@@ -71,6 +72,7 @@ def init_db() -> None:
         "status_detail TEXT",
         "devin_url TEXT",
         "last_posted_message_id TEXT",
+        "acus_consumed REAL DEFAULT 0",
     ):
         try:
             conn.execute(f"ALTER TABLE sessions ADD COLUMN {col_def}")
@@ -152,6 +154,7 @@ def update_session_status(
     pr_url: Optional[str] = None,
     error_message: Optional[str] = None,
     error_type: Optional[str] = None,
+    acus_consumed: Optional[float] = None,
 ) -> None:
     """Transition session to a new status with appropriate metadata."""
     conn = _get_connection()
@@ -181,6 +184,7 @@ def update_session_status(
                 pr_url = COALESCE(?, pr_url),
                 error_message = COALESCE(?, error_message),
                 error_type = COALESCE(?, error_type),
+                acus_consumed = COALESCE(?, acus_consumed),
                 updated_at = ?,
                 completed_at = ?,
                 time_to_remediation_seconds = ?
@@ -192,6 +196,7 @@ def update_session_status(
                 pr_url,
                 error_message,
                 error_type,
+                acus_consumed,
                 now,
                 now,
                 ttr,
@@ -205,10 +210,11 @@ def update_session_status(
             SET status = ?,
                 status_detail = COALESCE(?, status_detail),
                 pr_url = COALESCE(?, pr_url),
+                acus_consumed = COALESCE(?, acus_consumed),
                 updated_at = ?
             WHERE session_id = ?
             """,
-            (status, status_detail, pr_url, now, session_id),
+            (status, status_detail, pr_url, acus_consumed, now, session_id),
         )
     conn.commit()
     logger.info(
@@ -278,6 +284,11 @@ def get_dashboard_stats() -> dict:
     ).fetchone()
     avg_ttr = avg_ttr_row["avg_ttr"] if avg_ttr_row["avg_ttr"] else 0
 
+    total_cost_row = conn.execute(
+        "SELECT COALESCE(SUM(acus_consumed), 0) AS total_cost FROM sessions"
+    ).fetchone()
+    total_cost = total_cost_row["total_cost"]
+
     return {
         "total": total,
         "active": active,
@@ -285,5 +296,6 @@ def get_dashboard_stats() -> dict:
         "failed": failed,
         "success_rate": round(success_rate, 1),
         "avg_ttr_seconds": int(avg_ttr),
+        "total_cost_acus": round(total_cost, 2),
         "by_status": by_status,
     }

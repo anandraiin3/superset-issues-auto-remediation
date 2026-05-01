@@ -309,8 +309,9 @@ def remediate_issue(
                 extra={**log_extra, "event_type": "poll_status"},
             )
 
-            # Always update the granular status_detail + PR URL in DB
+            # Always update the granular status_detail + PR URL + cost in DB
             pr_url = _extract_pr_url(session_data)
+            acus = session_data.get("acus_consumed") or None
 
             # Derive the display detail: if a PR exists and Devin is
             # just "working", surface a more informative "pr_ready" so
@@ -324,12 +325,17 @@ def remediate_issue(
                 "running",
                 status_detail=display_detail,
                 pr_url=pr_url,
+                acus_consumed=acus,
             )
 
             # v3: "exit" with status_detail "finished" means task completed
             if status == "exit" and status_detail == "finished":
                 update_session_status(
-                    session_id, "completed", status_detail="finished", pr_url=pr_url
+                    session_id,
+                    "completed",
+                    status_detail="finished",
+                    pr_url=pr_url,
+                    acus_consumed=acus,
                 )
                 logger.info(
                     f"Session {session_id} completed — PR: {pr_url or 'none'}",
@@ -346,6 +352,7 @@ def remediate_issue(
                     status_detail=reason,
                     error_message=f"Devin session reached terminal status: {status} ({reason})",
                     error_type="devin_terminal",
+                    acus_consumed=acus,
                 )
                 logger.warning(
                     f"Session {session_id} ended with status: {status} ({reason})",
@@ -356,7 +363,11 @@ def remediate_issue(
             # v3: "exit" without "finished" is also terminal
             if status == "exit":
                 update_session_status(
-                    session_id, "completed", status_detail=status_detail, pr_url=pr_url
+                    session_id,
+                    "completed",
+                    status_detail=status_detail,
+                    pr_url=pr_url,
+                    acus_consumed=acus,
                 )
                 logger.info(
                     f"Session {session_id} exited (detail: {status_detail}) — PR: {pr_url or 'none'}",

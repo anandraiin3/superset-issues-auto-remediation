@@ -97,8 +97,8 @@ The webhook reads the `issue.type.name` field from the GitHub webhook payload. I
    - **Granular tracking**: `working` → `pr_ready` (when PR detected) → `waiting_for_user` → `completed`
    - **Auto-comment**: When Devin asks an issue-related question, it's posted back to the GitHub issue
    - Infrastructure questions (permissions, tokens) are filtered out and NOT posted
-7. **Result recorded** — PR URL, status detail, and timing metrics are persisted to SQLite
-8. **Dashboard updated** — Real-time view with granular status and Devin session links
+7. **Result recorded** — PR URL, status detail, ACU cost, and timing metrics are persisted to SQLite
+8. **Dashboard updated** — Real-time view with clickable issue/PR/session links, granular status, and cost tracking
 
 ## CI/CD
 
@@ -151,7 +151,8 @@ Access the operations dashboard at `/dashboard` to see:
 - **Session counts** by status (active, completed, failed)
 - **Success rate** percentage
 - **Average time-to-remediation**
-- **Session list** with issue numbers, titles, statuses, status details, clickable PR links, and Devin session links
+- **Session list** with clickable issue numbers (→ GitHub issue), titles, statuses, status details, clickable PR links (→ actual PR), Devin session links (→ Devin UI), and per-session cost
+- **Cost tracking** — per-session ACU consumption and total cost across all sessions
 - **Granular status detail** — colour-coded sub-states: `working` (green), `waiting for user` (amber), `pr_ready` (blue)
 - **Status filters** to focus on specific session states
 

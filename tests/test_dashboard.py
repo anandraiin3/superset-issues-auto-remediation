@@ -80,6 +80,20 @@ class DashboardTestCase(unittest.TestCase):
         resp = self.client.get("/dashboard")
         self.assertIn(b"app.devin.ai/sessions/s-d4", resp.data)
 
+    def test_dashboard_issue_link(self) -> None:
+        reserve_issue(500, "Bug 500", "https://github.com/t/r")
+        create_session("s-d5", 500, "Bug 500", "https://github.com/t/r")
+        resp = self.client.get("/dashboard")
+        self.assertIn(b"https://github.com/t/r/issues/500", resp.data)
+
+    def test_dashboard_shows_cost(self) -> None:
+        reserve_issue(600, "Bug 600", "https://github.com/t/r")
+        create_session("s-d6", 600, "Bug 600", "https://github.com/t/r")
+        update_session_status("s-d6", "completed", acus_consumed=4.75)
+        resp = self.client.get("/dashboard")
+        self.assertIn(b"4.75", resp.data)
+        self.assertIn(b"Total Cost", resp.data)
+
     def test_health_endpoint(self) -> None:
         resp = self.client.get("/health")
         self.assertEqual(resp.status_code, 200)
