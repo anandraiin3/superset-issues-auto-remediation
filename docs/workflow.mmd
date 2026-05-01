@@ -1,0 +1,50 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1f6feb', 'primaryTextColor': '#e6edf3', 'primaryBorderColor': '#388bfd', 'lineColor': '#8b949e', 'secondaryColor': '#161b22', 'tertiaryColor': '#0d1117', 'fontSize': '14px'}}}%%
+flowchart TD
+    A["🔔 GitHub Issue Created\n(Bug / Feature / Task)"] -->|"Webhook POST"| B["🔐 Signature Validation\n(HMAC-SHA256)"]
+    B -->|"Invalid"| B1["❌ Rejected (403)"]
+    B -->|"Valid"| C["🏷️ Issue Type Filter"]
+    C -->|"Type not in config"| C1["⏭️ Skipped"]
+    C -->|"Bug / Feature / Task"| D["🔍 Idempotency Check\n(DB lookup by issue #)"]
+    D -->|"Duplicate"| D1["⏭️ Skipped"]
+    D -->|"New issue"| E["📝 Build Prompt\n(type-specific template)"]
+    E --> F["🚀 Create Devin Session\n(POST /v3/.../sessions)"]
+    F --> G["💾 DB: status=created"]
+    G --> H["💾 DB: status=running\ndetail=working"]
+
+    H --> I{"⏳ Poll Devin API\n(every 30s)"}
+
+    I -->|"status=running\ndetail=working\n+ PR exists"| J["💾 DB: detail=pr_ready\n🔵 PR available for review"]
+    J --> I
+
+    I -->|"status=running\ndetail=working\nno PR yet"| I
+
+    I -->|"status=running\ndetail=waiting_for_user"| K{"🤖 Fetch Latest Message\n(GET .../messages)"}
+    K -->|"Infrastructure question\n(token, permission, access)"| L["⚠️ Log only\n(not posted to GitHub)"]
+    L --> I
+    K -->|"Issue-related question\n(clarification, scope, tests)"| M["💬 Post to GitHub Issue\n(auto-comment)"]
+    M --> N["💾 Track last_posted_message_id"]
+    N --> I
+
+    I -->|"status=running\ndetail=waiting_for_approval"| I
+
+    I -->|"status=exit\ndetail=finished"| O["✅ DB: status=completed\ndetail=finished"]
+    O --> P["📋 Extract PR URL"]
+
+    I -->|"status=error\nor suspended"| Q["❌ DB: status=failed\ndetail=error reason"]
+
+    I -->|"Timeout exceeded\n(default: 45 min)"| R["⏰ DB: status=timed_out"]
+
+    P --> S["🎉 Remediation Complete\nPR ready for review"]
+
+    style A fill:#1f6feb,stroke:#388bfd,color:#fff
+    style B1 fill:#f85149,stroke:#f85149,color:#fff
+    style C1 fill:#484f58,stroke:#6e7681,color:#e6edf3
+    style D1 fill:#484f58,stroke:#6e7681,color:#e6edf3
+    style J fill:#1f6feb,stroke:#388bfd,color:#fff
+    style M fill:#d29922,stroke:#d29922,color:#000
+    style L fill:#484f58,stroke:#6e7681,color:#e6edf3
+    style O fill:#3fb950,stroke:#3fb950,color:#000
+    style Q fill:#f85149,stroke:#f85149,color:#fff
+    style R fill:#f85149,stroke:#f85149,color:#fff
+    style S fill:#3fb950,stroke:#3fb950,color:#000
+    style I fill:#161b22,stroke:#8b949e,color:#e6edf3
