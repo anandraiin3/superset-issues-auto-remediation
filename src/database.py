@@ -60,7 +60,7 @@ def init_db() -> None:
         -- (SQLite ignores ALTER TABLE ADD COLUMN if column exists when
         --  wrapped in a try/except at the Python level; we handle it below.)
 
-        CREATE INDEX IF NOT EXISTS idx_issue_number ON sessions(issue_number);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_issue_number ON sessions(issue_number);
         CREATE INDEX IF NOT EXISTS idx_status ON sessions(status);
         """
     )
@@ -91,6 +91,32 @@ def session_exists_for_issue(issue_number: int) -> bool:
     return row is not None
 
 
+def reserve_issue(issue_number: int, issue_title: str, repository_url: str) -> bool:
+    """Atomically reserve an issue number for remediation.
+
+    Inserts a placeholder row with a temporary session_id.  Returns True
+    if the reservation succeeded (i.e. no prior session exists for this
+    issue).  Returns False if a row already exists (UNIQUE constraint on
+    issue_number).
+
+    This eliminates the TOCTOU race between session_exists_for_issue()
+    and create_session() — the INSERT itself acts as the lock.
+    """
+    conn = _get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO sessions (session_id, issue_number, issue_title, repository_url, status)
+            VALUES (?, ?, ?, ?, 'created')
+            """,
+            (f"pending-{issue_number}", issue_number, issue_title, repository_url),
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False  # duplicate — another thread already reserved this issue
+
+
 def create_session(
     session_id: str,
     issue_number: int,
@@ -98,14 +124,15 @@ def create_session(
     repository_url: str,
     devin_url: str = "",
 ) -> None:
-    """Insert a new session record with status 'created'."""
+    """Update the placeholder row with the real Devin session details."""
     conn = _get_connection()
     conn.execute(
         """
-        INSERT INTO sessions (session_id, issue_number, issue_title, repository_url, status, devin_url)
-        VALUES (?, ?, ?, ?, 'created', ?)
+        UPDATE sessions
+        SET session_id = ?, devin_url = ?
+        WHERE issue_number = ? AND session_id = ?
         """,
-        (session_id, issue_number, issue_title, repository_url, devin_url),
+        (session_id, devin_url, issue_number, f"pending-{issue_number}"),
     )
     conn.commit()
     logger.info(

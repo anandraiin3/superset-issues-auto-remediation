@@ -10,11 +10,18 @@ os.environ.setdefault("REPOSITORY_URL", "https://github.com/test/repo")
 os.environ.setdefault("DATABASE_PATH", ":memory:")
 
 from app import create_app
-from src.database import create_session, init_db, update_session_status
+from src.database import (
+    create_session,
+    init_db,
+    reserve_issue,
+    reset_connection,
+    update_session_status,
+)
 
 
 class DashboardTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        reset_connection()
         self.app = create_app()
         self.client = self.app.test_client()
         init_db()
@@ -25,6 +32,7 @@ class DashboardTestCase(unittest.TestCase):
         self.assertIn(b"Vulnerability Remediation Dashboard", resp.data)
 
     def test_dashboard_shows_sessions(self) -> None:
+        reserve_issue(100, "Bug 100", "https://github.com/t/r")
         create_session("s-d1", 100, "Bug 100", "https://github.com/t/r")
         update_session_status(
             "s-d1", "completed", pr_url="https://github.com/t/r/pull/100"
@@ -34,6 +42,7 @@ class DashboardTestCase(unittest.TestCase):
         self.assertIn(b"View PR", resp.data)
 
     def test_dashboard_status_filter(self) -> None:
+        reserve_issue(200, "Bug 200", "https://github.com/t/r")
         create_session("s-d2", 200, "Bug 200", "https://github.com/t/r")
         update_session_status("s-d2", "failed", error_message="err", error_type="e")
         resp = self.client.get("/dashboard?status=failed")
@@ -42,6 +51,7 @@ class DashboardTestCase(unittest.TestCase):
         self.assertNotIn(b"Bug 200", resp_completed.data)
 
     def test_dashboard_shows_status_detail(self) -> None:
+        reserve_issue(300, "Bug 300", "https://github.com/t/r")
         create_session(
             "s-d3",
             300,
@@ -59,6 +69,7 @@ class DashboardTestCase(unittest.TestCase):
         self.assertIn(b"Session", resp.data)  # Devin session link
 
     def test_dashboard_shows_devin_link(self) -> None:
+        reserve_issue(400, "Feature 400", "https://github.com/t/r")
         create_session(
             "s-d4",
             400,

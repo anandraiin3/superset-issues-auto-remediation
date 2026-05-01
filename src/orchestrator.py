@@ -17,7 +17,7 @@ from src.config import Config
 from src.database import (
     create_session,
     get_session,
-    session_exists_for_issue,
+    reserve_issue,
     update_last_posted_message,
     update_session_status,
 )
@@ -163,7 +163,7 @@ def _fetch_latest_devin_message(
             continue
         eid = msg.get("event_id", "")
         if after_event_id and eid == after_event_id:
-            continue  # already posted this one
+            return None  # latest devin message was already posted
         return {"event_id": eid, "message": msg.get("message", "")}
     return None
 
@@ -235,8 +235,11 @@ def remediate_issue(
     log_extra = {"issue_number": issue_number}
 
     try:
-        # RO-01: Idempotency check
-        if session_exists_for_issue(issue_number):
+        # RO-01 / NF-05: Atomic idempotency — reserve the issue number
+        # in the DB *before* calling the Devin API.  The UNIQUE index on
+        # issue_number prevents two concurrent threads from both passing
+        # the check and creating duplicate sessions.
+        if not reserve_issue(issue_number, issue_title, repo_url):
             logger.info(
                 f"Session already exists for issue #{issue_number} — skipping",
                 extra={**log_extra, "event_type": "idempotency_skip"},
@@ -257,7 +260,7 @@ def remediate_issue(
         session_id = result["session_id"]
         log_extra["session_id"] = session_id
 
-        # Persist to DB
+        # Update the placeholder row with real Devin session details
         devin_url = result.get("url", "")
         create_session(session_id, issue_number, issue_title, repo_url, devin_url)
         update_session_status(session_id, "running", status_detail="working")

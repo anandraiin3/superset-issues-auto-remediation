@@ -14,6 +14,7 @@ os.environ["SESSION_TIMEOUT_MINUTES"] = "1"
 
 from src.database import get_session, init_db, reset_connection
 from src.orchestrator import (
+    _fetch_latest_devin_message,
     _is_infrastructure_question,
     remediate_issue,
 )
@@ -371,6 +372,47 @@ class InfraClassificationTestCase(unittest.TestCase):
                 "Should the fix apply to all database backends or just PostgreSQL?"
             )
         )
+
+
+class FetchMessageTestCase(unittest.TestCase):
+    """Tests for _fetch_latest_devin_message dedup behaviour."""
+
+    @patch("src.orchestrator.requests.get")
+    def test_returns_none_when_latest_already_posted(self, mock_get: MagicMock) -> None:
+        """If the newest devin message matches after_event_id, return None."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "items": [
+                {"source": "devin", "event_id": "old-1", "message": "old msg"},
+                {"source": "user", "event_id": "u-1", "message": "user msg"},
+                {"source": "devin", "event_id": "latest-1", "message": "latest"},
+            ]
+        }
+        mock_resp.raise_for_status = MagicMock()
+        mock_get.return_value = mock_resp
+
+        result = _fetch_latest_devin_message("test-sid", after_event_id="latest-1")
+        self.assertIsNone(result)
+
+    @patch("src.orchestrator.requests.get")
+    def test_returns_new_message_when_not_yet_posted(self, mock_get: MagicMock) -> None:
+        """If the newest devin message is different from after_event_id, return it."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "items": [
+                {"source": "devin", "event_id": "old-1", "message": "old msg"},
+                {"source": "devin", "event_id": "new-1", "message": "new question"},
+            ]
+        }
+        mock_resp.raise_for_status = MagicMock()
+        mock_get.return_value = mock_resp
+
+        result = _fetch_latest_devin_message("test-sid", after_event_id="old-1")
+        self.assertIsNotNone(result)
+        self.assertEqual(result["event_id"], "new-1")
+        self.assertEqual(result["message"], "new question")
 
 
 if __name__ == "__main__":
