@@ -7,6 +7,7 @@ all GitHub issue types (bug, feature, task).
 API reference: https://docs.devin.ai/api-reference/overview
 """
 
+import re
 import time
 from typing import Optional
 
@@ -15,7 +16,9 @@ import requests
 from src.config import Config
 from src.database import (
     create_session,
+    get_session,
     session_exists_for_issue,
+    update_last_posted_message,
     update_session_status,
 )
 from src.logger import get_logger
@@ -89,6 +92,119 @@ def _poll_session(session_id: str) -> dict:
     return resp.json()
 
 
+# ---------------------------------------------------------------------------
+# Infrastructure keywords — if a Devin "waiting_for_user" message contains
+# any of these, it is classified as an infrastructure/access problem rather
+# than a clarification about the issue itself.
+# ---------------------------------------------------------------------------
+_INFRA_KEYWORDS = [
+    "api key",
+    "api token",
+    "token expired",
+    "credentials",
+    "authentication",
+    "permission",
+    "permissions",
+    "access denied",
+    "forbidden",
+    "401",
+    "403",
+    "ssh key",
+    "deploy key",
+    "secret",
+    "contents:write",
+    "push access",
+    "write access",
+    "install the",
+    "rate limit",
+    "quota",
+    "billing",
+    "npm login",
+    "docker login",
+    "registry",
+]
+
+
+def _is_infrastructure_question(message: str) -> bool:
+    """Return True if the message is about infrastructure, not the issue."""
+    lower = message.lower()
+    return any(kw in lower for kw in _INFRA_KEYWORDS)
+
+
+def _fetch_latest_devin_message(
+    session_id: str,
+    after_event_id: Optional[str] = None,
+) -> Optional[dict]:
+    """Fetch the most recent *devin*-authored message from the session.
+
+    Returns ``{"event_id": ..., "message": ...}`` or *None*.
+    Uses the v3 messages endpoint with reverse pagination.
+    """
+    url = (
+        f"{DEVIN_API_BASE}/v3/organizations/{Config.DEVIN_ORG_ID}"
+        f"/sessions/devin-{session_id}/messages"
+    )
+    try:
+        resp = requests.get(
+            url,
+            headers=_headers(),
+            params={"first": 20},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.RequestException:
+        return None
+
+    # Walk items in reverse (newest first) and find first devin message
+    items = data.get("items", [])
+    for msg in reversed(items):
+        if msg.get("source") != "devin":
+            continue
+        eid = msg.get("event_id", "")
+        if after_event_id and eid == after_event_id:
+            continue  # already posted this one
+        return {"event_id": eid, "message": msg.get("message", "")}
+    return None
+
+
+def _post_github_issue_comment(
+    repo_url: str,
+    issue_number: int,
+    body: str,
+) -> bool:
+    """Post a comment on the GitHub issue using GITHUB_TOKEN.
+
+    ``repo_url`` is e.g. ``https://github.com/owner/repo``.
+    Returns True on success.
+    """
+    if not Config.GITHUB_TOKEN:
+        return False
+
+    # Extract owner/repo from URL
+    match = re.search(r"github\.com/([^/]+/[^/]+)", repo_url)
+    if not match:
+        return False
+    owner_repo = match.group(1).rstrip("/")
+
+    api_url = (
+        f"https://api.github.com/repos/{owner_repo}/issues/{issue_number}/comments"
+    )
+    try:
+        resp = requests.post(
+            api_url,
+            json={"body": body},
+            headers={
+                "Authorization": f"Bearer {Config.GITHUB_TOKEN}",
+                "Accept": "application/vnd.github+json",
+            },
+            timeout=30,
+        )
+        return resp.status_code in (200, 201)
+    except requests.RequestException:
+        return False
+
+
 def _extract_pr_url(session_data: dict) -> Optional[str]:
     """Extract the first PR URL from session response (RO-06).
 
@@ -142,8 +258,9 @@ def remediate_issue(
         log_extra["session_id"] = session_id
 
         # Persist to DB
-        create_session(session_id, issue_number, issue_title, repo_url)
-        update_session_status(session_id, "running")
+        devin_url = result.get("url", "")
+        create_session(session_id, issue_number, issue_title, repo_url, devin_url)
+        update_session_status(session_id, "running", status_detail="working")
 
         logger.info(
             f"Devin session created: {session_id} — url: {result.get('url', 'N/A')}",
@@ -189,10 +306,20 @@ def remediate_issue(
                 extra={**log_extra, "event_type": "poll_status"},
             )
 
+            # Always update the granular status_detail + PR URL in DB
+            pr_url = _extract_pr_url(session_data)
+            update_session_status(
+                session_id,
+                "running",
+                status_detail=status_detail or None,
+                pr_url=pr_url,
+            )
+
             # v3: "exit" with status_detail "finished" means task completed
             if status == "exit" and status_detail == "finished":
-                pr_url = _extract_pr_url(session_data)
-                update_session_status(session_id, "completed", pr_url=pr_url)
+                update_session_status(
+                    session_id, "completed", status_detail="finished", pr_url=pr_url
+                )
                 logger.info(
                     f"Session {session_id} completed — PR: {pr_url or 'none'}",
                     extra={**log_extra, "event_type": "session_completed"},
@@ -205,6 +332,7 @@ def remediate_issue(
                 update_session_status(
                     session_id,
                     "failed",
+                    status_detail=reason,
                     error_message=f"Devin session reached terminal status: {status} ({reason})",
                     error_type="devin_terminal",
                 )
@@ -216,13 +344,50 @@ def remediate_issue(
 
             # v3: "exit" without "finished" is also terminal
             if status == "exit":
-                pr_url = _extract_pr_url(session_data)
-                update_session_status(session_id, "completed", pr_url=pr_url)
+                update_session_status(
+                    session_id, "completed", status_detail=status_detail, pr_url=pr_url
+                )
                 logger.info(
                     f"Session {session_id} exited (detail: {status_detail}) — PR: {pr_url or 'none'}",
                     extra={**log_extra, "event_type": "session_completed"},
                 )
                 return
+
+            # ----------------------------------------------------------
+            # Auto-post: when Devin is waiting_for_user and the question
+            # is about the *issue* (not infrastructure), post it back to
+            # the GitHub issue so the reporter can respond.
+            # ----------------------------------------------------------
+            if status_detail == "waiting_for_user":
+                db_row = get_session(session_id)
+                last_posted = db_row.get("last_posted_message_id") if db_row else None
+                latest_msg = _fetch_latest_devin_message(
+                    session_id, after_event_id=last_posted
+                )
+                if latest_msg and not _is_infrastructure_question(
+                    latest_msg["message"]
+                ):
+                    comment_body = (
+                        f"🤖 **Devin AI** is working on this issue and has a question:\n\n"
+                        f"> {latest_msg['message']}\n\n"
+                        f"[View Devin session](https://app.devin.ai/sessions/{session_id})"
+                    )
+                    posted = _post_github_issue_comment(
+                        repo_url,
+                        issue_number,
+                        comment_body,
+                    )
+                    if posted:
+                        update_last_posted_message(session_id, latest_msg["event_id"])
+                        logger.info(
+                            f"Posted Devin question to issue #{issue_number}",
+                            extra={**log_extra, "event_type": "github_comment_posted"},
+                        )
+                    else:
+                        logger.warning(
+                            f"Failed to post comment to issue #{issue_number}",
+                            extra={**log_extra, "event_type": "github_comment_failed"},
+                        )
 
             # Non-terminal: new, creating, claimed, running, resuming — keep polling
 

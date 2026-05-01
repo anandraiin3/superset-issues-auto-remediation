@@ -44,20 +44,40 @@ def init_db() -> None:
             issue_title                 TEXT NOT NULL,
             repository_url              TEXT NOT NULL,
             status                      TEXT NOT NULL,
+            status_detail               TEXT,
+            devin_url                   TEXT,
             pr_url                      TEXT,
             error_message               TEXT,
             error_type                  TEXT,
+            last_posted_message_id      TEXT,
             created_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             completed_at                TIMESTAMP,
             time_to_remediation_seconds INTEGER
         );
 
+        -- Migrate existing tables: add columns if missing
+        -- (SQLite ignores ALTER TABLE ADD COLUMN if column exists when
+        --  wrapped in a try/except at the Python level; we handle it below.)
+
         CREATE INDEX IF NOT EXISTS idx_issue_number ON sessions(issue_number);
         CREATE INDEX IF NOT EXISTS idx_status ON sessions(status);
         """
     )
     conn.commit()
+
+    # Migrate: add new columns to existing tables (idempotent).
+    for col_def in (
+        "status_detail TEXT",
+        "devin_url TEXT",
+        "last_posted_message_id TEXT",
+    ):
+        try:
+            conn.execute(f"ALTER TABLE sessions ADD COLUMN {col_def}")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
     logger.info("Database initialised", extra={"event_type": "db_init"})
 
 
@@ -76,15 +96,16 @@ def create_session(
     issue_number: int,
     issue_title: str,
     repository_url: str,
+    devin_url: str = "",
 ) -> None:
     """Insert a new session record with status 'created'."""
     conn = _get_connection()
     conn.execute(
         """
-        INSERT INTO sessions (session_id, issue_number, issue_title, repository_url, status)
-        VALUES (?, ?, ?, ?, 'created')
+        INSERT INTO sessions (session_id, issue_number, issue_title, repository_url, status, devin_url)
+        VALUES (?, ?, ?, ?, 'created', ?)
         """,
-        (session_id, issue_number, issue_title, repository_url),
+        (session_id, issue_number, issue_title, repository_url, devin_url),
     )
     conn.commit()
     logger.info(
@@ -100,6 +121,7 @@ def create_session(
 def update_session_status(
     session_id: str,
     status: str,
+    status_detail: Optional[str] = None,
     pr_url: Optional[str] = None,
     error_message: Optional[str] = None,
     error_type: Optional[str] = None,
@@ -128,6 +150,7 @@ def update_session_status(
             """
             UPDATE sessions
             SET status = ?,
+                status_detail = COALESCE(?, status_detail),
                 pr_url = COALESCE(?, pr_url),
                 error_message = COALESCE(?, error_message),
                 error_type = COALESCE(?, error_type),
@@ -136,18 +159,29 @@ def update_session_status(
                 time_to_remediation_seconds = ?
             WHERE session_id = ?
             """,
-            (status, pr_url, error_message, error_type, now, now, ttr, session_id),
+            (
+                status,
+                status_detail,
+                pr_url,
+                error_message,
+                error_type,
+                now,
+                now,
+                ttr,
+                session_id,
+            ),
         )
     else:
         conn.execute(
             """
             UPDATE sessions
             SET status = ?,
+                status_detail = COALESCE(?, status_detail),
                 pr_url = COALESCE(?, pr_url),
                 updated_at = ?
             WHERE session_id = ?
             """,
-            (status, pr_url, now, session_id),
+            (status, status_detail, pr_url, now, session_id),
         )
     conn.commit()
     logger.info(
@@ -157,6 +191,25 @@ def update_session_status(
             "event_type": "status_transition",
         },
     )
+
+
+def get_session(session_id: str) -> Optional[dict]:
+    """Return a single session record by session_id."""
+    conn = _get_connection()
+    row = conn.execute(
+        "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def update_last_posted_message(session_id: str, message_id: str) -> None:
+    """Track the last Devin message that was posted to the GitHub issue."""
+    conn = _get_connection()
+    conn.execute(
+        "UPDATE sessions SET last_posted_message_id = ? WHERE session_id = ?",
+        (message_id, session_id),
+    )
+    conn.commit()
 
 
 def get_all_sessions() -> list[dict]:

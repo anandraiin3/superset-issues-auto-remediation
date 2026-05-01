@@ -41,6 +41,34 @@ class DashboardTestCase(unittest.TestCase):
         resp_completed = self.client.get("/dashboard?status=completed")
         self.assertNotIn(b"Bug 200", resp_completed.data)
 
+    def test_dashboard_shows_status_detail(self) -> None:
+        create_session(
+            "s-d3",
+            300,
+            "Bug 300",
+            "https://github.com/t/r",
+            devin_url="https://app.devin.ai/sessions/s-d3",
+        )
+        update_session_status(
+            "s-d3",
+            "running",
+            status_detail="waiting_for_user",
+        )
+        resp = self.client.get("/dashboard")
+        self.assertIn(b"waiting for user", resp.data)
+        self.assertIn(b"Session", resp.data)  # Devin session link
+
+    def test_dashboard_shows_devin_link(self) -> None:
+        create_session(
+            "s-d4",
+            400,
+            "Feature 400",
+            "https://github.com/t/r",
+            devin_url="https://app.devin.ai/sessions/s-d4",
+        )
+        resp = self.client.get("/dashboard")
+        self.assertIn(b"app.devin.ai/sessions/s-d4", resp.data)
+
     def test_health_endpoint(self) -> None:
         resp = self.client.get("/health")
         self.assertEqual(resp.status_code, 200)

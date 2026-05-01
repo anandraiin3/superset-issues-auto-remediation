@@ -116,6 +116,15 @@
         .badge-failed     { background: #f8514933; color: var(--red); }
         .badge-timed_out  { background: #f8514933; color: var(--red); }
 
+        .status-detail {
+            display: block;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .status-detail.waiting { color: #d29922; }
+        .status-detail.working { color: var(--green); }
+
         .empty {
             text-align: center;
             padding: 48px;
@@ -179,6 +188,7 @@
                 <th>Title</th>
                 <th>Status</th>
                 <th>PR</th>
+                <th>Devin</th>
                 <th>Created</th>
                 <th>Duration</th>
             </tr>
@@ -188,11 +198,24 @@
             <tr>
                 <td>#{{ s.issue_number }}</td>
                 <td>{{ s.issue_title }}</td>
-                <td><span class="badge badge-{{ s.status }}">{{ s.status }}</span></td>
+                <td>
+                    <span class="badge badge-{{ s.status }}">{{ s.status }}</span>
+                    {% if s.status_detail %}
+                    <span class="status-detail {{ 'waiting' if 'waiting' in (s.status_detail or '') else 'working' if s.status_detail == 'working' else '' }}">
+                        {{ s.status_detail | replace('_', ' ') }}
+                    </span>
+                    {% endif %}
+                </td>
                 <td>
                     {% if s.pr_url %}
-                        <!-- DB-05: Clickable PR link opening in new tab -->
                         <a href="{{ s.pr_url }}" target="_blank" rel="noopener">View PR</a>
+                    {% else %}
+                        <span style="color: var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if s.devin_url %}
+                        <a href="{{ s.devin_url }}" target="_blank" rel="noopener">Session</a>
                     {% else %}
                         <span style="color: var(--text-muted);">—</span>
                     {% endif %}
