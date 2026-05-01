@@ -54,6 +54,8 @@ def init_db() -> None:
             created_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             completed_at                TIMESTAMP,
+            devin_started_at            TIMESTAMP,
+            pr_raised_at                TIMESTAMP,
             time_to_remediation_seconds INTEGER
         );
 
@@ -73,6 +75,8 @@ def init_db() -> None:
         "devin_url TEXT",
         "last_posted_message_id TEXT",
         "acus_consumed REAL DEFAULT 0",
+        "devin_started_at TIMESTAMP",
+        "pr_raised_at TIMESTAMP",
     ):
         try:
             conn.execute(f"ALTER TABLE sessions ADD COLUMN {col_def}")
@@ -128,13 +132,14 @@ def create_session(
 ) -> None:
     """Update the placeholder row with the real Devin session details."""
     conn = _get_connection()
+    now = datetime.now(timezone.utc).isoformat()
     conn.execute(
         """
         UPDATE sessions
-        SET session_id = ?, devin_url = ?
+        SET session_id = ?, devin_url = ?, devin_started_at = ?
         WHERE issue_number = ? AND session_id = ?
         """,
-        (session_id, devin_url, issue_number, f"pending-{issue_number}"),
+        (session_id, devin_url, now, issue_number, f"pending-{issue_number}"),
     )
     conn.commit()
     logger.info(
@@ -160,6 +165,18 @@ def update_session_status(
     conn = _get_connection()
     now = datetime.now(timezone.utc).isoformat()
 
+    # Record pr_raised_at the first time a PR URL appears
+    pr_raised_update = ""
+    pr_raised_param: list = []
+    if pr_url:
+        row = conn.execute(
+            "SELECT pr_raised_at FROM sessions WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        if row and not row["pr_raised_at"]:
+            pr_raised_update = ", pr_raised_at = ?"
+            pr_raised_param = [now]
+
     if status in ("completed", "failed", "timed_out"):
         # Calculate time-to-remediation
         row = conn.execute(
@@ -177,7 +194,7 @@ def update_session_status(
             ttr = int((datetime.now(timezone.utc) - created_aware).total_seconds())
 
         conn.execute(
-            """
+            f"""
             UPDATE sessions
             SET status = ?,
                 status_detail = COALESCE(?, status_detail),
@@ -188,6 +205,7 @@ def update_session_status(
                 updated_at = ?,
                 completed_at = ?,
                 time_to_remediation_seconds = ?
+                {pr_raised_update}
             WHERE session_id = ?
             """,
             (
@@ -200,21 +218,31 @@ def update_session_status(
                 now,
                 now,
                 ttr,
+                *pr_raised_param,
                 session_id,
             ),
         )
     else:
         conn.execute(
-            """
+            f"""
             UPDATE sessions
             SET status = ?,
                 status_detail = COALESCE(?, status_detail),
                 pr_url = COALESCE(?, pr_url),
                 acus_consumed = COALESCE(?, acus_consumed),
                 updated_at = ?
+                {pr_raised_update}
             WHERE session_id = ?
             """,
-            (status, status_detail, pr_url, acus_consumed, now, session_id),
+            (
+                status,
+                status_detail,
+                pr_url,
+                acus_consumed,
+                now,
+                *pr_raised_param,
+                session_id,
+            ),
         )
     conn.commit()
     logger.info(
@@ -245,11 +273,38 @@ def update_last_posted_message(session_id: str, message_id: str) -> None:
     conn.commit()
 
 
+def _ts_to_aware(raw: str) -> datetime:
+    """Parse an ISO timestamp and ensure it is UTC-aware."""
+    dt = datetime.fromisoformat(raw)
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
+def _enrich_durations(row: dict) -> dict:
+    """Add computed overall_time_ms and devin_time_ms to a session dict."""
+    # Overall time: webhook trigger (created_at) → PR raised (pr_raised_at)
+    overall_ms: Optional[int] = None
+    if row.get("created_at") and row.get("pr_raised_at"):
+        delta = _ts_to_aware(row["pr_raised_at"]) - _ts_to_aware(row["created_at"])
+        overall_ms = int(delta.total_seconds() * 1000)
+
+    # Devin time: session creation (devin_started_at) → session exit (completed_at)
+    devin_ms: Optional[int] = None
+    if row.get("devin_started_at") and row.get("completed_at"):
+        delta = _ts_to_aware(row["completed_at"]) - _ts_to_aware(
+            row["devin_started_at"]
+        )
+        devin_ms = int(delta.total_seconds() * 1000)
+
+    row["overall_time_ms"] = overall_ms
+    row["devin_time_ms"] = devin_ms
+    return row
+
+
 def get_all_sessions() -> list[dict]:
     """Return all session records ordered by most recent first."""
     conn = _get_connection()
     rows = conn.execute("SELECT * FROM sessions ORDER BY created_at DESC").fetchall()
-    return [dict(r) for r in rows]
+    return [_enrich_durations(dict(r)) for r in rows]
 
 
 def get_sessions_by_status(status: str) -> list[dict]:
@@ -259,7 +314,7 @@ def get_sessions_by_status(status: str) -> list[dict]:
         "SELECT * FROM sessions WHERE status = ? ORDER BY created_at DESC",
         (status,),
     ).fetchall()
-    return [dict(r) for r in rows]
+    return [_enrich_durations(dict(r)) for r in rows]
 
 
 def get_dashboard_stats() -> dict:
@@ -279,10 +334,18 @@ def get_dashboard_stats() -> dict:
 
     success_rate = (completed / total * 100) if total > 0 else 0.0
 
-    avg_ttr_row = conn.execute(
-        "SELECT AVG(time_to_remediation_seconds) AS avg_ttr FROM sessions WHERE status = 'completed'"
-    ).fetchone()
-    avg_ttr = avg_ttr_row["avg_ttr"] if avg_ttr_row["avg_ttr"] else 0
+    # Compute average overall time (webhook → PR) in ms for completed sessions
+    rows_with_pr = conn.execute(
+        "SELECT created_at, pr_raised_at FROM sessions WHERE pr_raised_at IS NOT NULL"
+    ).fetchall()
+    overall_ms_values = []
+    for r in rows_with_pr:
+        if r["created_at"] and r["pr_raised_at"]:
+            delta = _ts_to_aware(r["pr_raised_at"]) - _ts_to_aware(r["created_at"])
+            overall_ms_values.append(int(delta.total_seconds() * 1000))
+    avg_overall_ms = (
+        int(sum(overall_ms_values) / len(overall_ms_values)) if overall_ms_values else 0
+    )
 
     total_cost_row = conn.execute(
         "SELECT COALESCE(SUM(acus_consumed), 0) AS total_cost FROM sessions"
@@ -295,7 +358,7 @@ def get_dashboard_stats() -> dict:
         "completed": completed,
         "failed": failed,
         "success_rate": round(success_rate, 1),
-        "avg_ttr_seconds": int(avg_ttr),
+        "avg_overall_ms": avg_overall_ms,
         "total_cost_acus": round(total_cost, 2),
         "by_status": by_status,
     }

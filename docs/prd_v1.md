@@ -1,7 +1,7 @@
 # Product Requirements Document
 ## Event-Driven Issue Remediation System
 **Author:** Anand Rai
-**Version:** 1.4
+**Version:** 1.5
 **Date:** April 2026
 **Status:** Draft
 
@@ -328,6 +328,8 @@ Scope: Do not make changes beyond what is required to complete this task.
 | OB-03 | Store PR URL on successful session completion | Must Have |
 | OB-04 | Store error message and error type on session failure | Must Have |
 | OB-05 | Calculate and store time_to_remediation_seconds on completion | Must Have |
+|| OB-12 | Record `devin_started_at` timestamp when Devin session is created via API | Must Have |
+|| OB-13 | Record `pr_raised_at` timestamp the first time a PR URL appears (immutable once set) | Must Have |
 | OB-06 | Support status values: `created`, `running`, `completed`, `failed`, `timed_out` | Must Have |
 | OB-07 | Database must persist across container restarts via volume mount | Must Have |
 || OB-08 | Store `status_detail` for granular sub-state tracking (working, waiting_for_user, waiting_for_approval, pr_ready, finished) | Must Have |
@@ -354,6 +356,8 @@ CREATE TABLE sessions (
     created_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at                TIMESTAMP,
+    devin_started_at            TIMESTAMP,
+    pr_raised_at                TIMESTAMP,
     time_to_remediation_seconds INTEGER
 );
 
@@ -390,6 +394,10 @@ CREATE INDEX idx_status ON sessions(status);
 || DB-12 | Issue numbers must be clickable links to the corresponding GitHub issue page (`{repository_url}/issues/{issue_number}`) | Must Have |
 || DB-13 | Display per-session ACU cost in a dedicated "Cost" column (shows ACU value or `—` if zero) | Must Have |
 || DB-14 | Display total ACU cost across all sessions as a dashboard stat card | Must Have |
+|| DB-15 | Display "Overall (ms)" column: time from webhook trigger (`created_at`) to PR raised (`pr_raised_at`) in milliseconds | Must Have |
+|| DB-16 | Display "Devin (ms)" column: time from Devin session creation (`devin_started_at`) to session exit (`completed_at`) in milliseconds | Must Have |
+|| DB-17 | Duration fields must use `is not none` check (not truthiness) so that 0 ms renders correctly instead of `—` | Must Have |
+|| DB-18 | Display average overall time (webhook → PR) across all sessions with PRs as a dashboard stat card in milliseconds | Should Have |
 
 ---
 
@@ -497,11 +505,20 @@ The system is considered production-ready when:
 
 ---
 
-*PRD Version 1.4 — Anand Rai — April 2026*
+*PRD Version 1.5 — Anand Rai — April 2026*
 
 ---
 
 ## Changelog
+
+### v1.5 (April 2026)
+- **Overall time tracking (OB-12, OB-13, DB-15)**: New `pr_raised_at` timestamp recorded the first time a PR URL appears; dashboard shows "Overall (ms)" column = `pr_raised_at - created_at` (webhook trigger → PR raised) in milliseconds
+- **Devin time tracking (OB-12, DB-16)**: New `devin_started_at` timestamp recorded when Devin session is created via API; dashboard shows "Devin (ms)" column = `completed_at - devin_started_at` (Devin session lifetime) in milliseconds
+- **Duration display fix (DB-17)**: Duration fields now use `is not none` Jinja2 check instead of truthiness, so `0 ms` renders correctly instead of showing `—`
+- **Average overall time stat card (DB-18)**: Dashboard stat card shows average overall time (webhook → PR) in milliseconds across all sessions with PRs
+- **New DB columns**: `devin_started_at TIMESTAMP`, `pr_raised_at TIMESTAMP` added to sessions table (migration is idempotent)
+- **New requirements**: OB-12, OB-13, DB-15 through DB-18
+- **56 tests** (up from 52)
 
 ### v1.4 (April 2026)
 - **Clickable issue links (DB-12)**: Issue numbers on the dashboard are now hyperlinks to the corresponding GitHub issue page (`{repository_url}/issues/{issue_number}`)

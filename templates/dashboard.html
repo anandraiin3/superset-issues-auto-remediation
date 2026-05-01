@@ -165,8 +165,8 @@
             <div class="value blue">{{ stats.success_rate }}%</div>
         </div>
         <div class="stat-card">
-            <div class="label">Avg Time to Remediation</div>
-            <div class="value">{{ stats.avg_ttr_seconds }}s</div>
+            <div class="label">Avg Overall Time</div>
+            <div class="value">{{ "{:,}".format(stats.avg_overall_ms) }} ms</div>
         </div>
         <div class="stat-card">
             <div class="label">Total Cost</div>
@@ -195,8 +195,9 @@
                 <th>PR</th>
                 <th>Devin</th>
                 <th>Cost (ACUs)</th>
+                <th>Overall (ms)</th>
+                <th>Devin (ms)</th>
                 <th>Created</th>
-                <th>Duration</th>
             </tr>
         </thead>
         <tbody>
@@ -233,14 +234,21 @@
                         <span style="color: var(--text-muted);">—</span>
                     {% endif %}
                 </td>
-                <td>{{ s.created_at }}</td>
                 <td>
-                    {% if s.time_to_remediation_seconds %}
-                        {{ s.time_to_remediation_seconds }}s
+                    {% if s.overall_time_ms is not none %}
+                        {{ "{:,}".format(s.overall_time_ms) }}
                     {% else %}
                         <span style="color: var(--text-muted);">—</span>
                     {% endif %}
                 </td>
+                <td>
+                    {% if s.devin_time_ms is not none %}
+                        {{ "{:,}".format(s.devin_time_ms) }}
+                    {% else %}
+                        <span style="color: var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+                <td>{{ s.created_at }}</td>
             </tr>
             {% endfor %}
         </tbody>
