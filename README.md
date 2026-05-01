@@ -9,13 +9,16 @@ GitHub Issue (type: Bug / Feature / Task)
         │ Webhook POST
         ▼
   Webhook Listener ──► Remediation Orchestrator ──► Devin API v3
-        │                       │
-        ▼                       ▼
-    HTTP 200              SQLite Store
-   (immediate)                  │
-                                ▼
-                        Operations Dashboard
+        │                       │                       │
+        ▼                       ▼                       ▼
+    HTTP 200              SQLite Store          Devin Messages API
+   (immediate)                  │                       │
+                                ▼                       ▼
+                        Operations Dashboard    Auto-Comment on
+                        (granular status)       GitHub Issue
 ```
+
+See [`docs/prd_v1.md`](docs/prd_v1.md) for full architecture, [workflow diagram](docs/workflow-diagram.png), and [state lifecycle](docs/state-lifecycle.png).
 
 ## Quick Start
 
@@ -91,8 +94,11 @@ The webhook reads the `issue.type.name` field from the GitHub webhook payload. I
 4. **Idempotency check** — Duplicate issues are detected and skipped
 5. **Devin session created** — A structured prompt with issue context and type is sent to the Devin API v3
 6. **Session polled** — The orchestrator polls session status until completion, failure, or timeout
-7. **Result recorded** — PR URL, status, and timing metrics are persisted to SQLite
-8. **Dashboard updated** — Real-time view of all remediation sessions
+   - **Granular tracking**: `working` → `pr_ready` (when PR detected) → `waiting_for_user` → `completed`
+   - **Auto-comment**: When Devin asks an issue-related question, it's posted back to the GitHub issue
+   - Infrastructure questions (permissions, tokens) are filtered out and NOT posted
+7. **Result recorded** — PR URL, status detail, and timing metrics are persisted to SQLite
+8. **Dashboard updated** — Real-time view with granular status and Devin session links
 
 ## CI/CD
 
@@ -145,7 +151,8 @@ Access the operations dashboard at `/dashboard` to see:
 - **Session counts** by status (active, completed, failed)
 - **Success rate** percentage
 - **Average time-to-remediation**
-- **Session list** with issue numbers, titles, statuses, and clickable PR links
+- **Session list** with issue numbers, titles, statuses, status details, clickable PR links, and Devin session links
+- **Granular status detail** — colour-coded sub-states: `working` (green), `waiting for user` (amber), `pr_ready` (blue)
 - **Status filters** to focus on specific session states
 
 The dashboard auto-refreshes every 30 seconds.

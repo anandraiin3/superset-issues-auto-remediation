@@ -1,0 +1,26 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1f6feb', 'primaryTextColor': '#e6edf3', 'primaryBorderColor': '#388bfd', 'lineColor': '#8b949e', 'secondaryColor': '#161b22', 'tertiaryColor': '#0d1117', 'fontSize': '14px'}}}%%
+stateDiagram-v2
+    direction LR
+
+    [*] --> created: Issue accepted
+
+    created --> running: Devin session\ncreated
+
+    state running {
+        direction TB
+        working --> pr_ready: PR detected
+        working --> waiting_for_user: Devin asks question
+        working --> waiting_for_approval: Needs approval
+        pr_ready --> waiting_for_user: Devin asks question
+        pr_ready --> working: Still iterating
+        waiting_for_user --> working: User responds
+        waiting_for_approval --> working: Approved
+    }
+
+    running --> completed: exit / finished
+    running --> failed: error / suspended
+    running --> timed_out: Timeout exceeded
+
+    completed --> [*]
+    failed --> [*]
+    timed_out --> [*]

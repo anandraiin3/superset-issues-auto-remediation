@@ -1,7 +1,7 @@
 # Product Requirements Document
 ## Event-Driven Issue Remediation System
 **Author:** Anand Rai
-**Version:** 1.2
+**Version:** 1.3
 **Date:** April 2026
 **Status:** Draft
 
@@ -44,13 +44,16 @@ Build a production-grade, event-driven automation system that:
 
 ## 4. Scope
 
-### In Scope — Version 1.2
+### In Scope — Version 1.3
 - Webhook listener triggered by GitHub issue creation, filtered by native issue type (default: `Bug`, `Feature`, `Task`)
 - Support for all standard GitHub issue types via the `issue.type` field in webhook payloads
 - AI agent session manager — creates, monitors, and tracks remediation sessions via Devin API v3
 - Idempotent session handling — prevents duplicate remediations for the same issue
+- **Granular status tracking** — dashboard shows Devin session sub-states (`working`, `waiting_for_user`, `waiting_for_approval`, `pr_ready`, `finished`)
+- **Auto-post Devin questions to GitHub issues** — when Devin is waiting for user input on an issue-related question, the question is automatically posted as a comment on the GitHub issue
+- **Infrastructure vs issue-related classification** — infrastructure questions (permissions, tokens, access) are filtered out and NOT posted to GitHub
 - Observability layer — logs session lifecycle, PR output, success/failure signals, time-to-remediation
-- Operational dashboard — real-time view of system health and remediation throughput
+- Operational dashboard — real-time view of system health, remediation throughput, and Devin session links
 - Docker containerisation for reproducible, portable deployment
 - GitHub Actions CI pipeline (lint, test, Docker build)
 
@@ -111,9 +114,62 @@ Build a production-grade, event-driven automation system that:
                            │  • Session list with PR links │
                            │  • Success rate               │
                            │  • Average time-to-remediation│
+                           │  • Granular status detail     │
+                           │  • Devin session links        │
                            │  • Auto-refresh               │
                            └──────────────────────────────┘
+
+                           ┌──────────────────────────────┐
+                           │   GitHub Issue Auto-Comment   │
+                           │  • Fetch Devin messages (v3)  │
+                           │  • Classify: infra vs issue   │
+                           │  • Post issue questions back  │
+                           │  • De-duplicate via event_id  │
+                           └──────────────────────────────┘
 ```
+
+---
+
+## 5.1 Issue Resolution Workflow (DAG)
+
+The end-to-end issue resolution process can be represented as a directed acyclic graph. Each node represents a processing step; edges represent transitions triggered by events or conditions.
+
+![Issue Resolution Workflow](workflow-diagram.png)
+
+**Workflow stages:**
+
+1. **Ingestion** — GitHub webhook delivers the issue event; the system validates the signature, filters by issue type, and checks for duplicate sessions.
+2. **Prompt Construction** — A type-specific prompt (Bug → `fix:`, Feature → `feat:`, Task → `chore:`) is built from the issue context.
+3. **Session Creation** — Devin API v3 session is created; DB record transitions from `created` → `running/working`.
+4. **Polling Loop** — The orchestrator polls Devin every 30 seconds. Sub-states are tracked:
+   - `working` → actively coding
+   - `pr_ready` → PR exists, still iterating (e.g., tests, CI)
+   - `waiting_for_user` → Devin has a question → auto-post to GitHub if issue-related
+   - `waiting_for_approval` → needs human approval
+5. **Terminal States** — Session reaches `completed` (exit/finished), `failed` (error/suspended), or `timed_out`.
+
+## 5.2 Session State Lifecycle
+
+The session status machine shows all valid state transitions:
+
+![Session State Lifecycle](state-lifecycle.png)
+
+**State transitions:**
+
+| From | To | Trigger |
+|---|---|---|
+| `[start]` | `created` | Issue accepted by webhook |
+| `created` | `running` | Devin API session created |
+| `running/working` | `running/pr_ready` | PR URL detected in session data |
+| `running/working` | `running/waiting_for_user` | Devin asks a question |
+| `running/working` | `running/waiting_for_approval` | Devin needs approval |
+| `running/waiting_for_user` | `running/working` | User responds to question |
+| `running/pr_ready` | `running/waiting_for_user` | Devin asks a question after PR creation |
+| `running/*` | `completed` | Devin reports `exit` / `finished` |
+| `running/*` | `failed` | Devin reports `error` / `suspended` |
+| `running/*` | `timed_out` | Session exceeds configured timeout |
+
+> **Mermaid source files:** `docs/workflow.mmd` and `docs/state-lifecycle.mmd` can be edited and re-rendered with `npx @mermaid-js/mermaid-cli`.
 
 ---
 
@@ -149,6 +205,12 @@ Build a production-grade, event-driven automation system that:
 | RO-09 | Log all state transitions with timestamps | Must Have |
 | RO-10 | Support configurable polling interval via environment variable | Should Have |
 | RO-11 | Support configurable session timeout via environment variable | Should Have |
+|| RO-12 | Track granular `status_detail` from Devin API v3 in DB (working, waiting_for_user, waiting_for_approval, finished) | Must Have |
+|| RO-13 | When `status_detail` is `waiting_for_user`, fetch the latest Devin message via the v3 messages API | Must Have |
+|| RO-14 | Classify Devin messages as infrastructure vs issue-related using keyword matching | Must Have |
+|| RO-15 | Post issue-related questions to the GitHub issue as a comment, with a link to the Devin session | Must Have |
+|| RO-16 | Track `last_posted_message_id` to prevent duplicate comments for the same message | Must Have |
+|| RO-17 | Set `status_detail` to `pr_ready` when a PR exists but Devin is still actively working | Should Have |
 
 ---
 
@@ -263,6 +325,9 @@ Scope: Do not make changes beyond what is required to complete this task.
 | OB-05 | Calculate and store time_to_remediation_seconds on completion | Must Have |
 | OB-06 | Support status values: `created`, `running`, `completed`, `failed`, `timed_out` | Must Have |
 | OB-07 | Database must persist across container restarts via volume mount | Must Have |
+|| OB-08 | Store `status_detail` for granular sub-state tracking (working, waiting_for_user, waiting_for_approval, pr_ready, finished) | Must Have |
+|| OB-09 | Store `devin_url` for direct links to Devin sessions | Should Have |
+|| OB-10 | Store `last_posted_message_id` to de-duplicate auto-posted GitHub comments | Must Have |
 
 **Schema:**
 ```sql
@@ -273,9 +338,12 @@ CREATE TABLE sessions (
     issue_title                 TEXT NOT NULL,
     repository_url              TEXT NOT NULL,
     status                      TEXT NOT NULL,
+    status_detail               TEXT,
+    devin_url                   TEXT,
     pr_url                      TEXT,
     error_message               TEXT,
     error_type                  TEXT,
+    last_posted_message_id      TEXT,
     created_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at                TIMESTAMP,
@@ -286,6 +354,15 @@ CREATE INDEX idx_issue_number ON sessions(issue_number);
 CREATE INDEX idx_status ON sessions(status);
 ```
 
+**Status Detail Values:**
+| `status_detail` | Meaning | Displayed On Dashboard |
+|---|---|---|
+| `working` | Devin is actively coding | Green text |
+| `waiting_for_user` | Devin has a question for the user | Yellow/amber text |
+| `waiting_for_approval` | Devin needs approval to proceed | Yellow/amber text |
+| `pr_ready` | A PR exists but Devin is still working (e.g., running tests, fixing CI) | Blue bold text |
+| `finished` | Devin has completed the task | Set on terminal "completed" status |
+
 ---
 
 ### 6.5 Operations Dashboard
@@ -295,12 +372,14 @@ CREATE INDEX idx_status ON sessions(status);
 | DB-01 | Display count of sessions by status: active, completed, failed | Must Have |
 | DB-02 | Display overall success rate as percentage | Must Have |
 | DB-03 | Display average time-to-remediation across all completed sessions | Must Have |
-| DB-04 | List all sessions with: issue number, title, status, PR link, created time | Must Have |
+| DB-04 | List all sessions with: issue number, title, status, status detail, PR link, Devin session link, created time | Must Have |
 | DB-05 | PR links must be clickable — open in new tab | Must Have |
 | DB-06 | Dashboard accessible at `/dashboard` | Must Have |
 | DB-07 | Auto-refresh every 30 seconds | Should Have |
 | DB-08 | Filter sessions by status | Should Have |
 | DB-09 | Show session timeline — time spent in each status | Could Have |
+|| DB-10 | Display granular `status_detail` below the main status badge with colour-coded styling | Must Have |
+|| DB-11 | Show Devin session links for quick access to the AI agent interface | Should Have |
 
 ---
 
@@ -408,11 +487,24 @@ The system is considered production-ready when:
 
 ---
 
-*PRD Version 1.2 — Anand Rai — April 2026*
+*PRD Version 1.3 — Anand Rai — April 2026*
 
 ---
 
 ## Changelog
+
+### v1.3 (April 2026)
+- **Issue resolution workflow diagram (DAG)**: Added visual diagram (`docs/workflow-diagram.png`) showing the full end-to-end issue resolution process as a directed acyclic graph
+- **Session state lifecycle diagram**: Added state machine diagram (`docs/state-lifecycle.png`) showing all valid session state transitions
+- **Mermaid source files**: `docs/workflow.mmd` and `docs/state-lifecycle.mmd` for editable diagram sources
+- **Granular status tracking**: Dashboard now shows `status_detail` from the Devin API v3 (working, waiting_for_user, waiting_for_approval) alongside the main status badge, with colour-coded styling
+- **`pr_ready` sub-status**: When a PR exists but Devin is still working (e.g., running tests), the dashboard shows `pr_ready` in blue bold text — giving reviewers a signal that the PR is available
+- **Auto-post Devin questions to GitHub issues**: When Devin is `waiting_for_user` and the question is about the issue (not infrastructure), the question is automatically posted as a comment on the GitHub issue with a link to the Devin session
+- **Infrastructure vs issue-related classification**: Messages containing keywords like `permission`, `token`, `API key`, `contents:write`, `push access` are classified as infrastructure and NOT posted to GitHub
+- **De-duplication**: `last_posted_message_id` tracks the last posted message to prevent duplicate comments
+- **New DB columns**: `status_detail`, `devin_url`, `last_posted_message_id` added to sessions table (migration is idempotent)
+- **Devin session links**: Dashboard includes direct links to Devin sessions for quick access
+- **New requirements**: RO-12 through RO-17, OB-08 through OB-10, DB-10, DB-11
 
 ### v1.2 (April 2026)
 - **Devin API v3 migration**: All API calls now use Devin API v3 (`/v3/organizations/{org_id}/sessions`). v1/v2 endpoints are no longer used.

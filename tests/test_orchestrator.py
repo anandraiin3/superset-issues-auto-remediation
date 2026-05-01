@@ -138,6 +138,57 @@ class OrchestratorTestCase(unittest.TestCase):
 
     @patch("src.orchestrator._poll_session")
     @patch("src.orchestrator._create_devin_session")
+    def test_pr_ready_status_when_pr_exists(
+        self, mock_create: MagicMock, mock_poll: MagicMock
+    ) -> None:
+        """When a PR exists and Devin is 'working', status_detail should be 'pr_ready'."""
+        mock_create.return_value = {
+            "session_id": "ses-pr-ready",
+            "url": "https://app.devin.ai/sessions/ses-pr-ready",
+            "status": "running",
+            "tags": [],
+            "org_id": "test-org",
+            "created_at": 1700000000,
+            "updated_at": 1700000000,
+            "acus_consumed": 0,
+            "pull_requests": [],
+        }
+        # First poll: working with a PR → should become pr_ready
+        # Second poll: exit/finished
+        mock_poll.side_effect = [
+            {
+                "session_id": "ses-pr-ready",
+                "status": "running",
+                "status_detail": "working",
+                "pull_requests": [
+                    {
+                        "pr_url": "https://github.com/test/repo/pull/42",
+                        "pr_state": "open",
+                    }
+                ],
+            },
+            {
+                "session_id": "ses-pr-ready",
+                "status": "exit",
+                "status_detail": "finished",
+                "pull_requests": [
+                    {
+                        "pr_url": "https://github.com/test/repo/pull/42",
+                        "pr_state": "open",
+                    }
+                ],
+            },
+        ]
+
+        remediate_issue("https://github.com/test/repo", 85, "Bug", "body", "bug")
+        row = get_session("ses-pr-ready")
+        self.assertIsNotNone(row)
+        # Final status is completed/finished, but pr_url should be set
+        self.assertEqual(row["status"], "completed")
+        self.assertEqual(row["pr_url"], "https://github.com/test/repo/pull/42")
+
+    @patch("src.orchestrator._poll_session")
+    @patch("src.orchestrator._create_devin_session")
     def test_status_detail_stored_in_db(
         self, mock_create: MagicMock, mock_poll: MagicMock
     ) -> None:

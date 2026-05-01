@@ -308,10 +308,18 @@ def remediate_issue(
 
             # Always update the granular status_detail + PR URL in DB
             pr_url = _extract_pr_url(session_data)
+
+            # Derive the display detail: if a PR exists and Devin is
+            # just "working", surface a more informative "pr_ready" so
+            # the dashboard conveys that a PR is available for review.
+            display_detail = status_detail or None
+            if pr_url and status_detail == "working":
+                display_detail = "pr_ready"
+
             update_session_status(
                 session_id,
                 "running",
-                status_detail=status_detail or None,
+                status_detail=display_detail,
                 pr_url=pr_url,
             )
 
