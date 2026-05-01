@@ -40,6 +40,9 @@ DEVIN_ORG_ID=your_devin_org_id
 GITHUB_TOKEN=ghp_your_github_personal_access_token
 REPOSITORY_URL=https://github.com/your-org/your-repo
 
+# Optional — set to auto-register webhook on startup
+APP_BASE_URL=https://your-server.example.com
+
 # Optional — defaults shown
 ISSUE_TYPES=bug,feature,task
 POLLING_INTERVAL_SECONDS=30
@@ -99,6 +102,20 @@ docker run -d \
 
 ### 4. Configure GitHub Webhook
 
+**Option A — Automatic registration (recommended):**
+
+Set `APP_BASE_URL` in your `.env` to the public URL of your server:
+
+```env
+APP_BASE_URL=https://your-server.example.com
+```
+
+On startup, the app will automatically register a webhook on the repository specified in `REPOSITORY_URL`. If a matching webhook already exists, it updates the config. If `APP_BASE_URL` is not set, auto-registration is skipped.
+
+> Requires `GITHUB_TOKEN` with **Webhooks: Read & Write** permission.
+
+**Option B — Manual registration:**
+
 1. Go to your GitHub repository **Settings → Webhooks → Add webhook**
 2. Set **Payload URL** to `https://your-server:5000/webhook`
 3. Set **Content type** to `application/json`
@@ -143,7 +160,7 @@ A GitHub personal access token is used to post auto-comments on issues when Devi
 | Permission | Scope | Why |
 |---|---|---|
 | **Issues** | Read & Write | Post Devin’s questions as comments on issues |
-| **Webhooks** | Read & Write | (Optional) Programmatic webhook setup |
+| **Webhooks** | Read & Write | Required for automatic webhook registration (when `APP_BASE_URL` is set) |
 | **Contents** | Read | Devin needs to read repo contents for remediation |
 
 **Option A — Fine-grained PAT** (recommended):
@@ -192,6 +209,7 @@ All configuration is injected via environment variables:
 | `DEVIN_ORG_ID` | Devin organisation ID (Settings → Service Users) | — | Yes |
 | `GITHUB_TOKEN` | GitHub personal access token (see [Credentials Setup](#credentials-setup)) | — | Yes (for auto-comments) |
 | `REPOSITORY_URL` | Target GitHub repository URL | — | Yes |
+| `APP_BASE_URL` | Public base URL of this app (enables automatic webhook registration on startup) | — | No |
 | `ISSUE_TYPES` | Comma-separated list of GitHub issue types that trigger remediation | `bug,feature,task` | No |
 | `POLLING_INTERVAL_SECONDS` | Devin session poll interval | `30` | No |
 | `SESSION_TIMEOUT_MINUTES` | Max session duration before timeout | `45` | No |
@@ -268,19 +286,19 @@ ruff check src/ tests/ app.py
 ruff format --check src/ tests/ app.py
 ```
 
-## Dashboard
+## Remediation Operations Dashboard
 
-Access the operations dashboard at `/dashboard` to see:
+Access the dashboard at `/dashboard` to see:
 
-- **Session counts** by status (active, completed, failed)
-- **Success rate** percentage
-- **Average time-to-remediation**
-- **Session list** with clickable issue numbers (→ GitHub issue), titles, statuses, status details, clickable PR links (→ actual PR), Devin session links (→ Devin UI), and per-session cost
-- **Cost tracking** — per-session ACU consumption and total cost across all sessions
+- **Key metrics** — session counts, success rate, average overall time (ms), total cost (ACUs)
+- **Session table** — each row shows issue (linked to GitHub), status badge + sub-state, action links (PR + Devin session), cost, timing (Overall ms, Devin ms), and created timestamp
+- **Status filters** — filter by created, running, completed, failed, timed out
 - **Granular status detail** — colour-coded sub-states: `working` (green), `waiting for user` (amber), `pr_ready` (blue)
-- **Status filters** to focus on specific session states
+- **Cost tracking** — per-session ACU consumption and total cost across all sessions
+- **Duration tracking** — Overall (webhook → PR) and Devin (session creation → exit) in milliseconds
+- **Live indicator** — auto-refreshes every 30 seconds with a pulse dot
 
-The dashboard auto-refreshes every 30 seconds.
+The UI follows [Figma's 7 UI design principles](https://www.figma.com/resource-library/ui-design-principles/) and [16 practical UI tips](https://github.com/johndelatto/step-by-step-ui-design-case-study-to-quickly-fix-an-example-user-interface-using-ui-design-tips): design tokens, WCAG AA contrast, responsive layout, visual hierarchy, and keyboard accessibility.
 
 ## API Endpoints
 

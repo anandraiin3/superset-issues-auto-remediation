@@ -16,6 +16,7 @@ class Config:
     DEVIN_ORG_ID: str = os.environ.get("DEVIN_ORG_ID", "")
     GITHUB_TOKEN: str = os.environ.get("GITHUB_TOKEN", "")
     REPOSITORY_URL: str = os.environ.get("REPOSITORY_URL", "")
+    APP_BASE_URL: str = os.environ.get("APP_BASE_URL", "")
 
     # Comma-separated list of GitHub issue types that trigger remediation.
     # Uses the native GitHub issue type field (issue.type.name).

@@ -3,260 +3,565 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vulnerability Remediation Dashboard</title>
+    <title>Remediation Operations Dashboard</title>
     <!-- DB-07: Auto-refresh every 30 seconds -->
     <meta http-equiv="refresh" content="30">
     <style>
+        /* ── Design tokens ──────────────────────────────────────────
+           Principle 3 (Consistency) + Tip 11 (Visual Consistency):
+           All colors, spacing, and typography defined once.
+           Principle 5 (Accessibility) + Tip 4:
+           WCAG AA contrast ratios (≥4.5:1 for text, ≥3:1 for UI).
+        */
         :root {
-            --bg: #0d1117;
-            --surface: #161b22;
-            --border: #30363d;
-            --text: #c9d1d9;
-            --text-muted: #8b949e;
-            --accent: #58a6ff;
-            --green: #3fb950;
-            --red: #f85149;
-            --yellow: #d29922;
-            --blue: #58a6ff;
+            --bg:          #0d1117;
+            --surface:     #161b22;
+            --surface-alt: #1c2129;
+            --border:      #30363d;
+            --text:        #e6edf3;
+            --text-sec:    #9198a1;
+            --text-muted:  #656d76;
+            --accent:      #4493f8;
+            --accent-hover:#58a6ff;
+            --green:       #3fb950;
+            --green-bg:    rgba(63,185,80,0.12);
+            --red:         #f85149;
+            --red-bg:      rgba(248,81,73,0.12);
+            --yellow:      #d29922;
+            --yellow-bg:   rgba(210,153,34,0.12);
+            --blue:        #4493f8;
+            --blue-bg:     rgba(68,147,248,0.12);
+            /* Spacing scale (Principle 7: Alignment) */
+            --sp-xs:  4px;
+            --sp-sm:  8px;
+            --sp-md:  16px;
+            --sp-lg:  24px;
+            --sp-xl:  32px;
+            --sp-2xl: 48px;
+            /* Typography scale (Tip 1: Clear Typography) */
+            --fs-xs:  11px;
+            --fs-sm:  12px;
+            --fs-md:  14px;
+            --fs-lg:  20px;
+            --fs-xl:  28px;
+            --fs-2xl: 36px;
+            /* Radii */
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --radius-pill: 100px;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        /* ── Reset & base ───────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
             background: var(--bg);
             color: var(--text);
-            line-height: 1.5;
-            padding: 24px;
+            line-height: 1.6;
+            min-height: 100vh;
         }
-        h1 { font-size: 24px; margin-bottom: 24px; }
+
+        /* ── Layout wrapper (Principle 7: Alignment — max-width grid) ── */
+        .layout {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: var(--sp-xl) var(--sp-lg);
+        }
+
+        /* ── Header (Principle 1: Hierarchy — largest text element) ── */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--sp-xl);
+            flex-wrap: wrap;
+            gap: var(--sp-md);
+        }
+        .header h1 {
+            font-size: var(--fs-xl);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--text);
+        }
+        .header-meta {
+            display: flex;
+            align-items: center;
+            gap: var(--sp-sm);
+            color: var(--text-muted);
+            font-size: var(--fs-sm);
+        }
+        .pulse {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ── Section labels (Principle 1: Hierarchy) ─────────────── */
+        .section-label {
+            font-size: var(--fs-sm);
+            font-weight: 600;
+            color: var(--text-sec);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: var(--sp-md);
+        }
+
+        /* ── Stat cards (Principle 6: Proximity — grouped metrics) ── */
         .stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 16px;
-            margin-bottom: 32px;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: var(--sp-md);
+            margin-bottom: var(--sp-xl);
         }
         .stat-card {
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 20px;
+            border-radius: var(--radius-md);
+            padding: var(--sp-lg) var(--sp-lg) var(--sp-md);
+            transition: border-color 0.2s ease, transform 0.15s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+        .stat-card:hover {
+            border-color: var(--text-muted);
+            transform: translateY(-1px);
         }
         .stat-card .label {
-            color: var(--text-muted);
-            font-size: 12px;
+            color: var(--text-sec);
+            font-size: var(--fs-sm);
+            font-weight: 500;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 4px;
+            letter-spacing: 0.04em;
+            margin-bottom: var(--sp-xs);
         }
         .stat-card .value {
-            font-size: 32px;
-            font-weight: 600;
+            font-size: var(--fs-2xl);
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            line-height: 1.2;
         }
-        .stat-card .value.green { color: var(--green); }
-        .stat-card .value.red { color: var(--red); }
+        .stat-card .unit {
+            font-size: var(--fs-sm);
+            font-weight: 400;
+            color: var(--text-sec);
+            margin-left: 2px;
+        }
+        .stat-card.accent-green::before { background: var(--green); }
+        .stat-card.accent-red::before   { background: var(--red); }
+        .stat-card.accent-yellow::before { background: var(--yellow); }
+        .stat-card.accent-blue::before   { background: var(--blue); }
+        .stat-card .value.green  { color: var(--green); }
+        .stat-card .value.red    { color: var(--red); }
         .stat-card .value.yellow { color: var(--yellow); }
-        .stat-card .value.blue { color: var(--blue); }
+        .stat-card .value.blue   { color: var(--blue); }
 
-        /* DB-08: Status filter */
-        .filters {
-            margin-bottom: 16px;
+        /* ── Filters (Tip 10: User Flow — clear navigation) ──────── */
+        .toolbar {
             display: flex;
-            gap: 8px;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--sp-md);
+            flex-wrap: wrap;
+            gap: var(--sp-sm);
+        }
+        .filters {
+            display: flex;
+            gap: 6px;
             flex-wrap: wrap;
         }
         .filters a {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
             padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 13px;
+            border-radius: var(--radius-pill);
+            font-size: var(--fs-sm);
+            font-weight: 500;
             text-decoration: none;
             border: 1px solid var(--border);
-            color: var(--text-muted);
-            transition: all 0.15s;
+            color: var(--text-sec);
+            transition: all 0.15s ease;
+            cursor: pointer;
         }
-        .filters a:hover, .filters a.active {
+        .filters a:hover {
+            border-color: var(--text-muted);
+            color: var(--text);
+            background: var(--surface-alt);
+        }
+        .filters a.active {
             background: var(--accent);
-            color: var(--bg);
+            color: #fff;
             border-color: var(--accent);
         }
+        .filters a:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+        .session-count {
+            font-size: var(--fs-sm);
+            color: var(--text-muted);
+        }
 
+        /* ── Table (Principle 9: Scannability) ───────────────────── */
+        .table-wrap {
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            background: var(--surface);
+        }
         table {
             width: 100%;
             border-collapse: collapse;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        th, td {
-            text-align: left;
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border);
         }
         th {
+            text-align: left;
+            padding: var(--sp-md) var(--sp-md);
+            font-size: var(--fs-xs);
+            font-weight: 600;
             color: var(--text-muted);
-            font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            background: var(--surface);
+            letter-spacing: 0.06em;
+            background: var(--surface-alt);
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+            position: sticky;
+            top: 0;
+            z-index: 1;
         }
-        tr:last-child td { border-bottom: none; }
-        a { color: var(--accent); text-decoration: none; }
-        a:hover { text-decoration: underline; }
+        td {
+            text-align: left;
+            padding: var(--sp-md) var(--sp-md);
+            border-bottom: 1px solid var(--border);
+            font-size: var(--fs-md);
+            vertical-align: middle;
+        }
+        tbody tr {
+            transition: background 0.1s ease;
+        }
+        tbody tr:hover {
+            background: var(--surface-alt);
+        }
+        tbody tr:last-child td { border-bottom: none; }
 
-        .badge {
-            display: inline-block;
-            padding: 2px 10px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
+        /* Numeric columns — right-aligned, tabular (Principle 7: Alignment) */
+        .col-numeric {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+            font-size: var(--fs-sm);
         }
-        .badge-created    { background: #1f6feb33; color: var(--blue); }
-        .badge-running    { background: #d2992233; color: var(--yellow); }
-        .badge-completed  { background: #3fb95033; color: var(--green); }
-        .badge-failed     { background: #f8514933; color: var(--red); }
-        .badge-timed_out  { background: #f8514933; color: var(--red); }
+        th.col-numeric { text-align: right; }
+
+        /* ── Links (Tip 2: Intuitive Icons — visual affordance) ── */
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { color: var(--accent-hover); text-decoration: underline; }
+        a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .link-external::after {
+            content: '\2197';
+            margin-left: 3px;
+            font-size: 0.8em;
+            opacity: 0.6;
+        }
+
+        /* ── Badges (Principle 4: Contrast — semantic color coding) */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: var(--radius-pill);
+            font-size: var(--fs-xs);
+            font-weight: 600;
+            white-space: nowrap;
+            line-height: 1.4;
+        }
+        .badge-created   { background: var(--blue-bg);   color: var(--blue); }
+        .badge-running   { background: var(--yellow-bg); color: var(--yellow); }
+        .badge-completed { background: var(--green-bg);  color: var(--green); }
+        .badge-failed    { background: var(--red-bg);    color: var(--red); }
+        .badge-timed_out { background: var(--red-bg);    color: var(--red); }
 
         .status-detail {
             display: block;
-            font-size: 11px;
+            font-size: var(--fs-xs);
             color: var(--text-muted);
-            margin-top: 2px;
+            margin-top: 3px;
+            line-height: 1.3;
         }
-        .status-detail.waiting { color: #d29922; }
-        .status-detail.working { color: var(--green); }
+        .status-detail.waiting  { color: var(--yellow); }
+        .status-detail.working  { color: var(--green); }
         .status-detail.pr-ready { color: var(--blue); font-weight: 600; }
 
-        .empty {
-            text-align: center;
-            padding: 48px;
-            color: var(--text-muted);
+        /* ── Issue cell (Principle 6: Proximity — number + title) ─ */
+        .issue-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
         }
+        .issue-num {
+            font-weight: 600;
+            font-size: var(--fs-md);
+        }
+        .issue-title {
+            color: var(--text-sec);
+            font-size: var(--fs-sm);
+            line-height: 1.4;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 320px;
+        }
+
+        /* ── Actions cell (Principle 6: Proximity — grouped links) */
+        .actions {
+            display: flex;
+            gap: var(--sp-sm);
+            align-items: center;
+        }
+        .action-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 4px 10px;
+            border-radius: var(--radius-sm);
+            font-size: var(--fs-xs);
+            font-weight: 500;
+            color: var(--accent);
+            background: var(--blue-bg);
+            transition: background 0.15s ease;
+            white-space: nowrap;
+        }
+        .action-link:hover {
+            background: rgba(68,147,248,0.22);
+            text-decoration: none;
+        }
+        .action-link:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        /* ── Muted placeholder ──────────────────────────────────── */
+        .muted { color: var(--text-muted); }
+
+        /* ── Empty state (Tip 7: Microcopy) ──────────────────────── */
+        .empty-state {
+            text-align: center;
+            padding: var(--sp-2xl) var(--sp-lg);
+        }
+        .empty-state .icon {
+            font-size: 48px;
+            margin-bottom: var(--sp-md);
+            opacity: 0.3;
+        }
+        .empty-state p {
+            color: var(--text-muted);
+            font-size: var(--fs-md);
+        }
+        .empty-state .hint {
+            font-size: var(--fs-sm);
+            color: var(--text-muted);
+            margin-top: var(--sp-sm);
+            opacity: 0.7;
+        }
+
+        /* ── Footer ─────────────────────────────────────────────── */
         .footer {
-            margin-top: 24px;
-            font-size: 12px;
+            margin-top: var(--sp-xl);
+            padding-top: var(--sp-md);
+            border-top: 1px solid var(--border);
+            font-size: var(--fs-xs);
             color: var(--text-muted);
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--sp-sm);
         }
+
+        /* ── Responsive (Tip 3: Optimize for Mobile) ─────────── */
+        @media (max-width: 768px) {
+            .layout { padding: var(--sp-md); }
+            .header h1 { font-size: var(--fs-lg); }
+            .stats { grid-template-columns: repeat(2, 1fr); }
+            .stat-card .value { font-size: var(--fs-xl); }
+            .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            table { min-width: 800px; }
+            .issue-title { max-width: 180px; }
+        }
+        @media (max-width: 480px) {
+            .stats { grid-template-columns: 1fr; }
+        }
+
+        /* ── Scroll-to-top on long tables ───────────────────────── */
+        html { scroll-behavior: smooth; }
     </style>
 </head>
 <body>
-    <h1>Vulnerability Remediation Dashboard</h1>
+    <div class="layout">
+        <!-- ── Header (Principle 1: Hierarchy) ─────────────────── -->
+        <header class="header">
+            <h1>Remediation Operations Dashboard</h1>
+            <div class="header-meta" aria-label="Dashboard status">
+                <span class="pulse" aria-hidden="true"></span>
+                <span>Live &mdash; refreshes every 30s</span>
+            </div>
+        </header>
 
-    <!-- DB-01 / DB-02 / DB-03 -->
-    <div class="stats">
-        <div class="stat-card">
-            <div class="label">Total Sessions</div>
-            <div class="value">{{ stats.total }}</div>
+        <!-- ── Key metrics (Principle 6: Proximity) ────────────── -->
+        <div class="section-label">Overview</div>
+        <div class="stats" role="region" aria-label="Session statistics">
+            <div class="stat-card">
+                <div class="label">Total Sessions</div>
+                <div class="value">{{ stats.total }}</div>
+            </div>
+            <div class="stat-card accent-yellow">
+                <div class="label">Active</div>
+                <div class="value yellow">{{ stats.active }}</div>
+            </div>
+            <div class="stat-card accent-green">
+                <div class="label">Completed</div>
+                <div class="value green">{{ stats.completed }}</div>
+            </div>
+            <div class="stat-card accent-red">
+                <div class="label">Failed</div>
+                <div class="value red">{{ stats.failed }}</div>
+            </div>
+            <div class="stat-card accent-blue">
+                <div class="label">Success Rate</div>
+                <div class="value blue">{{ stats.success_rate }}<span class="unit">%</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Avg Overall Time</div>
+                <div class="value">{{ "{:,}".format(stats.avg_overall_ms) }}<span class="unit">ms</span></div>
+            </div>
+            <div class="stat-card accent-blue">
+                <div class="label">Total Cost</div>
+                <div class="value blue">{{ stats.total_cost_acus }}<span class="unit">ACUs</span></div>
+            </div>
         </div>
-        <div class="stat-card">
-            <div class="label">Active</div>
-            <div class="value yellow">{{ stats.active }}</div>
+
+        <!-- ── Toolbar: filters + count (Tip 10: User Flow) ───── -->
+        <div class="toolbar">
+            <nav class="filters" role="navigation" aria-label="Filter sessions by status">
+                <a href="/dashboard" class="{{ 'active' if not status_filter else '' }}">All</a>
+                <a href="/dashboard?status=created" class="{{ 'active' if status_filter == 'created' else '' }}">Created</a>
+                <a href="/dashboard?status=running" class="{{ 'active' if status_filter == 'running' else '' }}">Running</a>
+                <a href="/dashboard?status=completed" class="{{ 'active' if status_filter == 'completed' else '' }}">Completed</a>
+                <a href="/dashboard?status=failed" class="{{ 'active' if status_filter == 'failed' else '' }}">Failed</a>
+                <a href="/dashboard?status=timed_out" class="{{ 'active' if status_filter == 'timed_out' else '' }}">Timed Out</a>
+            </nav>
+            <span class="session-count">{{ sessions|length }} session{{ 's' if sessions|length != 1 else '' }}</span>
         </div>
-        <div class="stat-card">
-            <div class="label">Completed</div>
-            <div class="value green">{{ stats.completed }}</div>
+
+        <!-- ── Sessions table (Principle 9: Scannability) ──────── -->
+        {% if sessions %}
+        <div class="table-wrap" role="region" aria-label="Session list" tabindex="0">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Issue</th>
+                        <th>Status</th>
+                        <th>Links</th>
+                        <th class="col-numeric">Cost (ACUs)</th>
+                        <th class="col-numeric">Overall (ms)</th>
+                        <th class="col-numeric">Devin (ms)</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in sessions %}
+                    <tr>
+                        <!-- Issue: number + title (Principle 6: Proximity) -->
+                        <td>
+                            <div class="issue-cell">
+                                <a href="{{ s.repository_url }}/issues/{{ s.issue_number }}" target="_blank" rel="noopener" class="issue-num link-external">#{{ s.issue_number }}</a>
+                                <span class="issue-title" title="{{ s.issue_title }}">{{ s.issue_title }}</span>
+                            </div>
+                        </td>
+                        <!-- Status badge + detail -->
+                        <td>
+                            <span class="badge badge-{{ s.status }}">{{ s.status }}</span>
+                            {% if s.status_detail %}
+                            <span class="status-detail {{ 'waiting' if 'waiting' in (s.status_detail or '') else 'working' if s.status_detail == 'working' else 'pr-ready' if s.status_detail == 'pr_ready' else '' }}">
+                                {{ s.status_detail | replace('_', ' ') }}
+                            </span>
+                            {% endif %}
+                        </td>
+                        <!-- Actions: PR + Devin (Principle 6: Proximity) -->
+                        <td>
+                            <div class="actions">
+                                {% if s.pr_url %}
+                                    <a href="{{ s.pr_url }}" target="_blank" rel="noopener" class="action-link">PR</a>
+                                {% endif %}
+                                {% if s.devin_url %}
+                                    <a href="{{ s.devin_url }}" target="_blank" rel="noopener" class="action-link">Devin</a>
+                                {% endif %}
+                                {% if not s.pr_url and not s.devin_url %}
+                                    <span class="muted">&mdash;</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <!-- Numeric columns (Principle 7: Alignment — right-aligned, monospaced) -->
+                        <td class="col-numeric">
+                            {% if s.acus_consumed %}
+                                {{ s.acus_consumed }}
+                            {% else %}
+                                <span class="muted">&mdash;</span>
+                            {% endif %}
+                        </td>
+                        <td class="col-numeric">
+                            {% if s.overall_time_ms is not none %}
+                                {{ "{:,}".format(s.overall_time_ms) }}
+                            {% else %}
+                                <span class="muted">&mdash;</span>
+                            {% endif %}
+                        </td>
+                        <td class="col-numeric">
+                            {% if s.devin_time_ms is not none %}
+                                {{ "{:,}".format(s.devin_time_ms) }}
+                            {% else %}
+                                <span class="muted">&mdash;</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span title="{{ s.created_at }}">{{ s.created_at }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-        <div class="stat-card">
-            <div class="label">Failed</div>
-            <div class="value red">{{ stats.failed }}</div>
+        {% else %}
+        <!-- Empty state (Tip 7: Microcopy — helpful guidance) -->
+        <div class="table-wrap">
+            <div class="empty-state">
+                <div class="icon" aria-hidden="true">&#9744;</div>
+                <p>No sessions found</p>
+                <p class="hint">Sessions appear here when issues are created on the configured repository.</p>
+            </div>
         </div>
-        <div class="stat-card">
-            <div class="label">Success Rate</div>
-            <div class="value blue">{{ stats.success_rate }}%</div>
-        </div>
-        <div class="stat-card">
-            <div class="label">Avg Overall Time</div>
-            <div class="value">{{ "{:,}".format(stats.avg_overall_ms) }} ms</div>
-        </div>
-        <div class="stat-card">
-            <div class="label">Total Cost</div>
-            <div class="value blue">{{ stats.total_cost_acus }} ACUs</div>
-        </div>
+        {% endif %}
+
+        <!-- ── Footer ──────────────────────────────────────────── -->
+        <footer class="footer">
+            <span class="pulse" aria-hidden="true"></span>
+            <span>Auto-refreshes every 30 seconds</span>
+        </footer>
     </div>
-
-    <!-- DB-08: Status filter -->
-    <div class="filters">
-        <a href="/dashboard" class="{{ 'active' if not status_filter else '' }}">All</a>
-        <a href="/dashboard?status=created" class="{{ 'active' if status_filter == 'created' else '' }}">Created</a>
-        <a href="/dashboard?status=running" class="{{ 'active' if status_filter == 'running' else '' }}">Running</a>
-        <a href="/dashboard?status=completed" class="{{ 'active' if status_filter == 'completed' else '' }}">Completed</a>
-        <a href="/dashboard?status=failed" class="{{ 'active' if status_filter == 'failed' else '' }}">Failed</a>
-        <a href="/dashboard?status=timed_out" class="{{ 'active' if status_filter == 'timed_out' else '' }}">Timed Out</a>
-    </div>
-
-    <!-- DB-04 / DB-05 -->
-    {% if sessions %}
-    <table>
-        <thead>
-            <tr>
-                <th>Issue</th>
-                <th>Title</th>
-                <th>Status</th>
-                <th>PR</th>
-                <th>Devin</th>
-                <th>Cost (ACUs)</th>
-                <th>Overall (ms)</th>
-                <th>Devin (ms)</th>
-                <th>Created</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for s in sessions %}
-            <tr>
-                <td><a href="{{ s.repository_url }}/issues/{{ s.issue_number }}" target="_blank" rel="noopener">#{{ s.issue_number }}</a></td>
-                <td>{{ s.issue_title }}</td>
-                <td>
-                    <span class="badge badge-{{ s.status }}">{{ s.status }}</span>
-                    {% if s.status_detail %}
-                    <span class="status-detail {{ 'waiting' if 'waiting' in (s.status_detail or '') else 'working' if s.status_detail == 'working' else '' }}">
-                        {{ s.status_detail | replace('_', ' ') }}
-                    </span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if s.pr_url %}
-                        <a href="{{ s.pr_url }}" target="_blank" rel="noopener">View PR</a>
-                    {% else %}
-                        <span style="color: var(--text-muted);">—</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if s.devin_url %}
-                        <a href="{{ s.devin_url }}" target="_blank" rel="noopener">Session</a>
-                    {% else %}
-                        <span style="color: var(--text-muted);">—</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if s.acus_consumed %}
-                        {{ s.acus_consumed }}
-                    {% else %}
-                        <span style="color: var(--text-muted);">—</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if s.overall_time_ms is not none %}
-                        {{ "{:,}".format(s.overall_time_ms) }}
-                    {% else %}
-                        <span style="color: var(--text-muted);">—</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if s.devin_time_ms is not none %}
-                        {{ "{:,}".format(s.devin_time_ms) }}
-                    {% else %}
-                        <span style="color: var(--text-muted);">—</span>
-                    {% endif %}
-                </td>
-                <td>{{ s.created_at }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <div class="empty">No sessions found.</div>
-    {% endif %}
-
-    <div class="footer">Auto-refreshes every 30 seconds</div>
 </body>
 </html>

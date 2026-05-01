@@ -29,7 +29,7 @@ class DashboardTestCase(unittest.TestCase):
     def test_dashboard_loads(self) -> None:
         resp = self.client.get("/dashboard")
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b"Vulnerability Remediation Dashboard", resp.data)
+        self.assertIn(b"Remediation Operations Dashboard", resp.data)
 
     def test_dashboard_shows_sessions(self) -> None:
         reserve_issue(100, "Bug 100", "https://github.com/t/r")
@@ -39,7 +39,7 @@ class DashboardTestCase(unittest.TestCase):
         )
         resp = self.client.get("/dashboard")
         self.assertIn(b"Bug 100", resp.data)
-        self.assertIn(b"View PR", resp.data)
+        self.assertIn(b"PR</a>", resp.data)
 
     def test_dashboard_status_filter(self) -> None:
         reserve_issue(200, "Bug 200", "https://github.com/t/r")
@@ -66,7 +66,7 @@ class DashboardTestCase(unittest.TestCase):
         )
         resp = self.client.get("/dashboard")
         self.assertIn(b"waiting for user", resp.data)
-        self.assertIn(b"Session", resp.data)  # Devin session link
+        self.assertIn(b"Devin</a>", resp.data)  # Devin session link
 
     def test_dashboard_shows_devin_link(self) -> None:
         reserve_issue(400, "Feature 400", "https://github.com/t/r")

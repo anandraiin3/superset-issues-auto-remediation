@@ -14,6 +14,7 @@ from src.database import init_db
 from src.dashboard import dashboard_bp
 from src.logger import get_logger
 from src.webhook import webhook_bp
+from src.webhook_registration import register_webhook
 
 logger = get_logger(__name__)
 
@@ -45,6 +46,9 @@ def create_app() -> Flask:
     # Register blueprints
     app.register_blueprint(webhook_bp)
     app.register_blueprint(dashboard_bp)
+
+    # Auto-register webhook on the target repository (idempotent)
+    register_webhook()
 
     # Health-check endpoint
     @app.route("/health")

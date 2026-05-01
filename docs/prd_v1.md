@@ -1,7 +1,7 @@
 # Product Requirements Document
 ## Event-Driven Issue Remediation System
 **Author:** Anand Rai
-**Version:** 1.5
+**Version:** 1.6
 **Date:** April 2026
 **Status:** Draft
 
@@ -44,7 +44,8 @@ Build a production-grade, event-driven automation system that:
 
 ## 4. Scope
 
-### In Scope — Version 1.4
+### In Scope — Version 1.6
+- **Automatic webhook registration** — on startup, the app auto-registers (or updates) a GitHub webhook on the target repository via the GitHub API; requires `APP_BASE_URL` to be set
 - Webhook listener triggered by GitHub issue creation, filtered by native issue type (default: `Bug`, `Feature`, `Task`)
 - Support for all standard GitHub issue types via the `issue.type` field in webhook payloads
 - AI agent session manager — creates, monitors, and tracks remediation sessions via Devin API v3
@@ -58,6 +59,7 @@ Build a production-grade, event-driven automation system that:
 - **Cost / ACU tracking** — each session records its ACU consumption from the Devin API; dashboard shows per-session cost and total cost across all sessions
 - Observability layer — logs session lifecycle, PR output, success/failure signals, time-to-remediation
 - Operational dashboard — real-time view of system health, remediation throughput, cost, and Devin session links
+- **UI design system** — dashboard redesigned following [Figma's 7 UI design principles](https://www.figma.com/resource-library/ui-design-principles/) and [16 practical UI tips](https://github.com/johndelatto/step-by-step-ui-design-case-study-to-quickly-fix-an-example-user-interface-using-ui-design-tips): design token system, WCAG AA contrast, responsive layout, visual hierarchy, semantic colour coding, tabular numeric alignment, grouped action links, empty state guidance
 - Docker containerisation for reproducible, portable deployment
 - GitHub Actions CI pipeline (lint, test, Docker build)
 
@@ -398,6 +400,8 @@ CREATE INDEX idx_status ON sessions(status);
 || DB-16 | Display "Devin (ms)" column: time from Devin session creation (`devin_started_at`) to session exit (`completed_at`) in milliseconds | Must Have |
 || DB-17 | Duration fields must use `is not none` check (not truthiness) so that 0 ms renders correctly instead of `—` | Must Have |
 || DB-18 | Display average overall time (webhook → PR) across all sessions with PRs as a dashboard stat card in milliseconds | Should Have |
+|| DB-19 | Dashboard title must be "Remediation Operations Dashboard" | Must Have |
+|| DB-20 | Dashboard must follow UI design principles: design tokens, WCAG AA contrast, responsive layout, visual hierarchy, semantic colour coding, tabular numeric alignment, grouped action links, empty state guidance | Should Have |
 
 ---
 
@@ -456,6 +460,7 @@ All configuration injected via environment variables:
 | `DEVIN_ORG_ID` | Devin organisation ID (Settings → Service Users) | — | Yes |
 | `GITHUB_TOKEN` | GitHub personal access token for PR operations | — | Yes |
 | `REPOSITORY_URL` | Target GitHub repository URL | — | Yes |
+| `APP_BASE_URL` | Public base URL of this application (e.g., `https://your-server.com`). When set, the app auto-registers a GitHub webhook on startup. | — | No |
 | `ISSUE_TYPES` | Comma-separated list of GitHub issue types that trigger remediation | `bug,feature,task` | No |
 | `POLLING_INTERVAL_SECONDS` | How often to poll Devin session status | `30` | No |
 | `SESSION_TIMEOUT_MINUTES` | Max session duration before marking timed out | `45` | No |
@@ -505,11 +510,29 @@ The system is considered production-ready when:
 
 ---
 
-*PRD Version 1.5 — Anand Rai — April 2026*
+*PRD Version 1.6 — Anand Rai — April 2026*
 
 ---
 
 ## Changelog
+
+### v1.6 (April 2026)
+- **Automatic webhook registration (WH-09, WH-10, WH-11)**: On startup, the app auto-registers a GitHub webhook on the target repository via the GitHub API when `APP_BASE_URL` is set; idempotent (checks for existing hook before creating); gracefully skips if `APP_BASE_URL` is not configured
+- **Dashboard UI redesign (DB-19, DB-20)**: Complete redesign following [Figma's 7 UI design principles](https://www.figma.com/resource-library/ui-design-principles/) and [16 practical UI tips](https://github.com/johndelatto/step-by-step-ui-design-case-study-to-quickly-fix-an-example-user-interface-using-ui-design-tips):
+  - Design token system (colours, spacing, typography, radii) for consistency
+  - WCAG AA compliant contrast ratios (≥4.5:1 text, ≥3:1 UI)
+  - Responsive layout (1280px max-width, mobile breakpoints at 768px and 480px)
+  - Visual hierarchy via section labels, colour-accented stat cards with top border indicators
+  - Tabular-nums + monospace for numeric columns, right-aligned for scannability
+  - Grouped action links (PR + Devin) in a single cell to reduce table width
+  - Issue number + title merged into one cell with proximity grouping
+  - Live pulse indicator in header with "refreshes every 30s" meta text
+  - Empty state with guidance text instead of bare "No sessions found"
+  - Focus-visible outlines for keyboard accessibility
+  - Session count displayed next to filters
+- **Dashboard renamed** to "Remediation Operations Dashboard" (DB-19)
+- **New env var `APP_BASE_URL`**: Public URL of the app for webhook auto-registration
+- **New test file**: `tests/test_webhook_registration.py` with 10 tests covering URL parsing, idempotent creation, and skip conditions
 
 ### v1.5 (April 2026)
 - **Overall time tracking (OB-12, OB-13, DB-15)**: New `pr_raised_at` timestamp recorded the first time a PR URL appears; dashboard shows "Overall (ms)" column = `pr_raised_at - created_at` (webhook trigger → PR raised) in milliseconds
