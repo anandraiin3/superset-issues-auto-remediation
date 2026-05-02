@@ -67,9 +67,14 @@ def _parse_issues(filepath: str) -> list[dict]:
         body_match = re.search(r"\*\*Type:\*\* \w+\s*\n(.*)", block, re.DOTALL)
         body = body_match.group(1).strip() if body_match else ""
 
-        # raw_block = full text from heading to next heading (for removal)
+        # raw_block = full text from heading to next heading (for removal).
+        # Trim before any ## section headers so removing the last issue
+        # of a section doesn't destroy the next section header.
         raw_end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
         raw_block = content[m.start() : raw_end]
+        section_hdr = re.search(r"\n## (?:Bug|Feature|Task)\s*\n", raw_block)
+        if section_hdr:
+            raw_block = raw_block[: section_hdr.start()]
 
         issues.append(
             {
