@@ -56,6 +56,8 @@ def _parse_issues(filepath: str) -> list[dict]:
         end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
         block = content[start:end].strip()
 
+        # Strip trailing section header (for last issue in a section)
+        block = re.sub(r"\n## (?:Bug|Feature|Task)\s*$", "", block)
         # Strip trailing --- separator between issues
         block = re.sub(r"\n---\s*$", "", block)
 
