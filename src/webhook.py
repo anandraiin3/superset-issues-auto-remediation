@@ -14,6 +14,7 @@ from typing import Any
 from flask import Blueprint, Response, request
 
 from src.config import Config
+from src.database import title_already_remediated
 from src.logger import get_logger
 from src.orchestrator import remediate_issue
 
@@ -145,6 +146,18 @@ def handle_webhook() -> tuple[Response, int]:
     issue_number: int = issue["number"]
     issue_title: str = issue.get("title", "")
     issue_body: str = issue.get("body", "") or ""
+
+    # Duplicate title detection: skip if the same issue title is already
+    # being remediated (or was successfully remediated) under another issue number.
+    if title_already_remediated(issue_title):
+        logger.info(
+            f"Issue #{issue_number} title already remediated — skipping duplicate",
+            extra={
+                "issue_number": issue_number,
+                "event_type": "duplicate_title",
+            },
+        )
+        return Response("OK", status=200)
 
     logger.info(
         f"Accepted issue #{issue_number}: {issue_title} (type={issue_type})",
