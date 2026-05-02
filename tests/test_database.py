@@ -154,18 +154,20 @@ class DatabaseTestCase(unittest.TestCase):
         update_session_status("s-062", "completed")
         sessions = get_all_sessions()
         s = next(x for x in sessions if x["session_id"] == "s-062")
-        # overall_time_ms should be set (webhook → PR)
+        # overall_time_ms should be set (webhook → session end)
         self.assertIsNotNone(s["overall_time_ms"])
         self.assertGreaterEqual(s["overall_time_ms"], 0)
         # devin_time_ms should be set (session creation → completion)
         self.assertIsNotNone(s["devin_time_ms"])
         self.assertGreaterEqual(s["devin_time_ms"], 0)
+        # overall_time_ms must be ≥ devin_time_ms
+        self.assertGreaterEqual(s["overall_time_ms"], s["devin_time_ms"])
 
     def test_duration_none_when_no_pr(self) -> None:
-        """overall_time_ms should be None when no PR has been raised."""
+        """overall_time_ms should be None when session is still running."""
         reserve_issue(63, "Bug H", "https://github.com/t/r")
         create_session("s-063", 63, "Bug H", "https://github.com/t/r")
-        update_session_status("s-063", "failed", error_message="err", error_type="e")
+        update_session_status("s-063", "running")
         sessions = get_all_sessions()
         s = next(x for x in sessions if x["session_id"] == "s-063")
         self.assertIsNone(s["overall_time_ms"])
