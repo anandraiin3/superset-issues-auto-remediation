@@ -149,7 +149,17 @@ def register_webhook() -> bool:
             )
             return True
 
-        result = _create_hook(owner_repo, target_url)
+        try:
+            result = _create_hook(owner_repo, target_url)
+        except requests.HTTPError as create_exc:
+            if create_exc.response is not None and create_exc.response.status_code == 422:
+                logger.info(
+                    f"Webhook already exists on {owner_repo} (duplicate registration ignored)",
+                    extra={"event_type": "webhook_already_exists"},
+                )
+                return True
+            raise
+
         hook_id = result.get("id")
         logger.info(
             f"Webhook registered on {owner_repo} (id={hook_id})",
@@ -162,12 +172,6 @@ def register_webhook() -> bool:
         return True
 
     except requests.HTTPError as exc:
-        if exc.response is not None and exc.response.status_code == 422:
-            logger.info(
-                f"Webhook already exists on {owner_repo} (duplicate registration ignored)",
-                extra={"event_type": "webhook_already_exists"},
-            )
-            return True
         logger.error(
             f"Failed to register webhook on {owner_repo}: {exc}",
             extra={"event_type": "webhook_registration_error"},
