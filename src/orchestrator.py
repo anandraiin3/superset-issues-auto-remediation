@@ -205,6 +205,27 @@ def _post_github_issue_comment(
         return False
 
 
+def _finish_devin_session(session_id: str) -> bool:
+    """Send a completion message and archive the Devin session.
+
+    Returns True if the session was successfully terminated.
+    """
+    url = (
+        f"{DEVIN_API_BASE}/v3/organizations/{Config.DEVIN_ORG_ID}"
+        f"/sessions/devin-{session_id}"
+    )
+    try:
+        resp = requests.delete(
+            url,
+            headers=_headers(),
+            params={"archive": True},
+            timeout=30,
+        )
+        return resp.status_code in (200, 204)
+    except requests.RequestException:
+        return False
+
+
 def _extract_pr_url(session_data: dict) -> Optional[str]:
     """Extract the first PR URL from session response (RO-06).
 
@@ -273,22 +294,37 @@ def remediate_issue(
         # RO-05: Poll until terminal state
         timeout_seconds = Config.SESSION_TIMEOUT_MINUTES * 60
         start = time.monotonic()
+        last_known_pr: Optional[str] = None
 
         while True:
             elapsed = time.monotonic() - start
 
-            # RO-08: Timeout guard
+            # RO-08: Timeout guard — if a PR was already created,
+            # the remediation goal is met even if the session hasn't
+            # reached a terminal state yet (e.g. waiting for CI).
             if elapsed > timeout_seconds:
-                logger.warning(
-                    f"Session {session_id} timed out after {Config.SESSION_TIMEOUT_MINUTES}m",
-                    extra={**log_extra, "event_type": "session_timed_out"},
-                )
-                update_session_status(
-                    session_id,
-                    "timed_out",
-                    error_message=f"Session exceeded {Config.SESSION_TIMEOUT_MINUTES} minute timeout",
-                    error_type="timeout",
-                )
+                if last_known_pr:
+                    update_session_status(
+                        session_id,
+                        "completed",
+                        status_detail="timed_out_with_pr",
+                        pr_url=last_known_pr,
+                    )
+                    logger.info(
+                        f"Session {session_id} timed out but PR exists — marking completed (PR: {last_known_pr})",
+                        extra={**log_extra, "event_type": "session_completed"},
+                    )
+                else:
+                    logger.warning(
+                        f"Session {session_id} timed out after {Config.SESSION_TIMEOUT_MINUTES}m",
+                        extra={**log_extra, "event_type": "session_timed_out"},
+                    )
+                    update_session_status(
+                        session_id,
+                        "timed_out",
+                        error_message=f"Session exceeded {Config.SESSION_TIMEOUT_MINUTES} minute timeout",
+                        error_type="timeout",
+                    )
                 return
 
             time.sleep(Config.POLLING_INTERVAL_SECONDS)
@@ -311,6 +347,8 @@ def remediate_issue(
 
             # Always update the granular status_detail + PR URL + cost in DB
             pr_url = _extract_pr_url(session_data)
+            if pr_url:
+                last_known_pr = pr_url
             acus = session_data.get("acus_consumed") or None
 
             # Derive the display detail: if a PR exists and Devin is
@@ -328,6 +366,26 @@ def remediate_issue(
                 acus_consumed=acus,
             )
 
+            # Auto-close: once a PR is created, if the session is idle
+            # (waiting_for_user, waiting_for_approval) terminate it and
+            # mark as completed.  This prevents sessions from lingering
+            # after their remediation goal (a PR) has been achieved.
+            if pr_url and status_detail in ("waiting_for_user", "waiting_for_approval"):
+                terminated = _finish_devin_session(session_id)
+                update_session_status(
+                    session_id,
+                    "completed",
+                    status_detail="auto_closed_with_pr",
+                    pr_url=pr_url,
+                    acus_consumed=acus,
+                )
+                logger.info(
+                    f"Session {session_id} auto-closed after PR created "
+                    f"(terminated={terminated}, PR: {pr_url})",
+                    extra={**log_extra, "event_type": "session_auto_closed"},
+                )
+                return
+
             # v3: "exit" with status_detail "finished" means task completed
             if status == "exit" and status_detail == "finished":
                 update_session_status(
@@ -343,8 +401,8 @@ def remediate_issue(
                 )
                 return
 
-            # v3: "error" or "suspended" are terminal failure states
-            if status in ("error", "suspended"):
+            # v3: "error" is always a terminal failure
+            if status == "error":
                 reason = status_detail or status
                 update_session_status(
                     session_id,
@@ -358,6 +416,39 @@ def remediate_issue(
                     f"Session {session_id} ended with status: {status} ({reason})",
                     extra={**log_extra, "event_type": "session_failed"},
                 )
+                return
+
+            # v3: "suspended" — if a PR was already created, the
+            # remediation goal is met; mark as completed.  Common cause:
+            # Devin goes idle while waiting for CI checks after pushing
+            # a PR, triggering an inactivity suspension.
+            if status == "suspended":
+                reason = status_detail or status
+                if pr_url:
+                    update_session_status(
+                        session_id,
+                        "completed",
+                        status_detail="suspended_with_pr",
+                        pr_url=pr_url,
+                        acus_consumed=acus,
+                    )
+                    logger.info(
+                        f"Session {session_id} suspended but PR exists — marking completed (PR: {pr_url})",
+                        extra={**log_extra, "event_type": "session_completed"},
+                    )
+                else:
+                    update_session_status(
+                        session_id,
+                        "failed",
+                        status_detail=reason,
+                        error_message=f"Devin session suspended without producing a PR: {reason}",
+                        error_type="devin_terminal",
+                        acus_consumed=acus,
+                    )
+                    logger.warning(
+                        f"Session {session_id} suspended without PR — marking failed ({reason})",
+                        extra={**log_extra, "event_type": "session_failed"},
+                    )
                 return
 
             # v3: "exit" without "finished" is also terminal

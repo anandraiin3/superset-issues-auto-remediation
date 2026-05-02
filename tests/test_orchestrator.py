@@ -113,9 +113,10 @@ class OrchestratorTestCase(unittest.TestCase):
 
     @patch("src.orchestrator._poll_session")
     @patch("src.orchestrator._create_devin_session")
-    def test_suspended_session_marked_failed(
+    def test_suspended_without_pr_marked_failed(
         self, mock_create: MagicMock, mock_poll: MagicMock
     ) -> None:
+        """Suspended session with no PR should be marked as failed."""
         mock_create.return_value = {
             "session_id": "ses-susp",
             "url": "https://app.devin.ai/sessions/ses-susp",
@@ -136,6 +137,115 @@ class OrchestratorTestCase(unittest.TestCase):
 
         remediate_issue("https://github.com/test/repo", 70, "Task", "body", "task")
         mock_poll.assert_called_once()
+        row = get_session("ses-susp")
+        self.assertEqual(row["status"], "failed")
+
+    @patch("src.orchestrator._poll_session")
+    @patch("src.orchestrator._create_devin_session")
+    def test_suspended_with_pr_marked_completed(
+        self, mock_create: MagicMock, mock_poll: MagicMock
+    ) -> None:
+        """Suspended session that already has a PR should be marked completed."""
+        mock_create.return_value = {
+            "session_id": "ses-susp-pr",
+            "url": "https://app.devin.ai/sessions/ses-susp-pr",
+            "status": "running",
+            "tags": [],
+            "org_id": "test-org",
+            "created_at": 1700000000,
+            "updated_at": 1700000000,
+            "acus_consumed": 0,
+            "pull_requests": [],
+        }
+        mock_poll.return_value = {
+            "session_id": "ses-susp-pr",
+            "status": "suspended",
+            "status_detail": "inactivity",
+            "pull_requests": [
+                {"pr_url": "https://github.com/test/repo/pull/11", "pr_state": "open"}
+            ],
+            "acus_consumed": 3.5,
+        }
+
+        remediate_issue("https://github.com/test/repo", 71, "Bug", "body", "bug")
+        row = get_session("ses-susp-pr")
+        self.assertEqual(row["status"], "completed")
+        self.assertEqual(row["status_detail"], "suspended_with_pr")
+        self.assertEqual(row["pr_url"], "https://github.com/test/repo/pull/11")
+
+    @patch("src.orchestrator._finish_devin_session")
+    @patch("src.orchestrator._poll_session")
+    @patch("src.orchestrator._create_devin_session")
+    def test_auto_close_when_pr_and_waiting_for_user(
+        self, mock_create: MagicMock, mock_poll: MagicMock, mock_finish: MagicMock
+    ) -> None:
+        """Session should be auto-closed when PR exists and Devin is waiting."""
+        mock_create.return_value = {
+            "session_id": "ses-autoclose",
+            "url": "https://app.devin.ai/sessions/ses-autoclose",
+            "status": "running",
+            "tags": [],
+            "org_id": "test-org",
+            "created_at": 1700000000,
+            "updated_at": 1700000000,
+            "acus_consumed": 0,
+            "pull_requests": [],
+        }
+        mock_poll.return_value = {
+            "session_id": "ses-autoclose",
+            "status": "running",
+            "status_detail": "waiting_for_user",
+            "pull_requests": [
+                {"pr_url": "https://github.com/test/repo/pull/13", "pr_state": "open"}
+            ],
+            "acus_consumed": 1.5,
+        }
+        mock_finish.return_value = True
+
+        remediate_issue("https://github.com/test/repo", 73, "Bug", "body", "bug")
+        row = get_session("ses-autoclose")
+        self.assertEqual(row["status"], "completed")
+        self.assertEqual(row["status_detail"], "auto_closed_with_pr")
+        self.assertEqual(row["pr_url"], "https://github.com/test/repo/pull/13")
+        mock_finish.assert_called_once_with("ses-autoclose")
+
+    @patch("src.orchestrator.time")
+    @patch("src.orchestrator._poll_session")
+    @patch("src.orchestrator._create_devin_session")
+    def test_timeout_with_pr_marked_completed(
+        self, mock_create: MagicMock, mock_poll: MagicMock, mock_time: MagicMock
+    ) -> None:
+        """Session that times out after PR was created should be completed."""
+        mock_create.return_value = {
+            "session_id": "ses-timeout-pr",
+            "url": "https://app.devin.ai/sessions/ses-timeout-pr",
+            "status": "running",
+            "tags": [],
+            "org_id": "test-org",
+            "created_at": 1700000000,
+            "updated_at": 1700000000,
+            "acus_consumed": 0,
+            "pull_requests": [],
+        }
+        # First poll: running with a PR, second poll: still running (timeout)
+        mock_poll.return_value = {
+            "session_id": "ses-timeout-pr",
+            "status": "running",
+            "status_detail": "working",
+            "pull_requests": [
+                {"pr_url": "https://github.com/test/repo/pull/12", "pr_state": "open"}
+            ],
+            "acus_consumed": 2.0,
+        }
+        # Simulate time passing beyond timeout on second iteration
+        mock_time.monotonic.side_effect = [0, 0, 99999]
+        mock_time.sleep = MagicMock()
+
+        remediate_issue("https://github.com/test/repo", 72, "Bug", "body", "bug")
+        row = get_session("ses-timeout-pr")
+        self.assertEqual(row["status"], "completed")
+        self.assertEqual(row["status_detail"], "timed_out_with_pr")
+        self.assertEqual(row["pr_url"], "https://github.com/test/repo/pull/12")
 
     @patch("src.orchestrator._poll_session")
     @patch("src.orchestrator._create_devin_session")

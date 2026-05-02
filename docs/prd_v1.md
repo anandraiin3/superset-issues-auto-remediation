@@ -1,7 +1,7 @@
 # Product Requirements Document
 ## Event-Driven Issue Remediation System
 **Author:** Anand Rai
-**Version:** 1.8
+**Version:** 1.9
 **Date:** April 2026
 **Status:** Draft
 
@@ -218,6 +218,10 @@ The session status machine shows all valid state transitions:
 || RO-17 | Set `status_detail` to `pr_ready` when a PR exists but Devin is still actively working | Should Have |
 || RO-18 | Track `acus_consumed` from Devin API session responses during polling and persist to DB | Must Have |
 || RO-19 | On session completion, fetch final ACU consumption from the session retrieve endpoint | Must Have |
+|| RO-20 | Auto-close Devin session when PR is created and session is `waiting_for_user` or `waiting_for_approval` — terminate via API with `archive=true` | Must Have |
+|| RO-21 | Mark auto-closed sessions as `completed` with `status_detail=auto_closed_with_pr` | Must Have |
+|| RO-22 | Sessions suspended with an existing PR must be marked `completed` (not `failed`) with `status_detail=suspended_with_pr` | Must Have |
+|| RO-23 | Sessions that timeout with an existing PR must be marked `completed` (not `timed_out`) with `status_detail=timed_out_with_pr` | Must Have |
 
 ---
 
@@ -517,6 +521,14 @@ The system is considered production-ready when:
 ---
 
 ## Changelog
+
+### v1.9 (May 2026)
+- **Auto-close sessions after PR (RO-20, RO-21)**: When a PR is created and the Devin session enters `waiting_for_user` or `waiting_for_approval`, the orchestrator automatically terminates the session (archived, read-only) and marks it as `completed` with `status_detail=auto_closed_with_pr`; prevents sessions from lingering and consuming ACUs after their remediation goal is achieved
+- **Suspended-with-PR fix (RO-22)**: Sessions that are suspended by Devin's inactivity timeout after creating a PR are now marked as `completed` (not `failed`); sessions suspended without a PR remain `failed`
+- **Timeout-with-PR fix (RO-23)**: Sessions that exceed the app's timeout but have already created a PR are marked as `completed` (not `timed_out`)
+- **New API integration**: `_finish_devin_session()` calls `DELETE /v3/organizations/{org_id}/sessions/{devin_id}?archive=true` to terminate and archive completed sessions
+- **State lifecycle updated**: Diagram now shows all PR-aware transition paths
+- **78 tests** (up from 74)
 
 ### v1.8 (May 2026)
 - **Duplicate title detection (NF-13, NF-14)**: Webhook handler now detects issues with the same normalised title as an existing session and skips them; normalisation strips `[Type]` prefix and lowercases; failed and timed-out sessions are excluded from the check so retries work
