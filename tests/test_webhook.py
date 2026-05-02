@@ -153,6 +153,86 @@ class WebhookTestCase(unittest.TestCase):
         resp = self.client.post("/webhook", data=body, headers=headers)
         self.assertIn(resp.status_code, (200, 403))
 
+    @patch("src.webhook.remediate_issue")
+    def test_title_prefix_bug_triggers_remediation(self, mock_remediate) -> None:
+        """Fallback: [Bug] title prefix triggers remediation on personal repos."""
+        payload = {
+            "action": "opened",
+            "issue": {
+                "number": 50,
+                "title": "[Bug] Fix CSS overlap in dashboard",
+                "body": "details...",
+                "labels": [],
+            },
+            "repository": {"html_url": "https://github.com/test/repo"},
+        }
+        resp = self._post_webhook(payload)
+        self.assertEqual(resp.status_code, 200)
+
+    @patch("src.webhook.remediate_issue")
+    def test_title_prefix_feature_triggers_remediation(self, mock_remediate) -> None:
+        """Fallback: [Feature] title prefix triggers remediation."""
+        payload = {
+            "action": "opened",
+            "issue": {
+                "number": 51,
+                "title": "[Feature] Add dark mode support",
+                "body": "details...",
+                "labels": [],
+            },
+            "repository": {"html_url": "https://github.com/test/repo"},
+        }
+        resp = self._post_webhook(payload)
+        self.assertEqual(resp.status_code, 200)
+
+    @patch("src.webhook.remediate_issue")
+    def test_title_prefix_task_triggers_remediation(self, mock_remediate) -> None:
+        """Fallback: [Task] title prefix triggers remediation."""
+        payload = {
+            "action": "opened",
+            "issue": {
+                "number": 52,
+                "title": "[Task] Update documentation",
+                "body": "details...",
+                "labels": [],
+            },
+            "repository": {"html_url": "https://github.com/test/repo"},
+        }
+        resp = self._post_webhook(payload)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_title_prefix_unsupported_type_skipped(self) -> None:
+        """[Epic] prefix is not a configured type — should be skipped."""
+        payload = {
+            "action": "opened",
+            "issue": {
+                "number": 53,
+                "title": "[Epic] Large refactor",
+                "body": "details...",
+                "labels": [],
+            },
+            "repository": {"html_url": "https://github.com/test/repo"},
+        }
+        resp = self._post_webhook(payload)
+        self.assertEqual(resp.status_code, 200)
+
+    @patch("src.webhook.remediate_issue")
+    def test_native_type_takes_priority_over_prefix(self, mock_remediate) -> None:
+        """Native issue.type should take priority over title prefix."""
+        payload = {
+            "action": "opened",
+            "issue": {
+                "number": 54,
+                "title": "[Feature] Something",
+                "body": "details...",
+                "labels": [],
+                "type": _make_issue_type("Bug"),
+            },
+            "repository": {"html_url": "https://github.com/test/repo"},
+        }
+        resp = self._post_webhook(payload)
+        self.assertEqual(resp.status_code, 200)
+
     def test_closed_action_ignored(self) -> None:
         payload = {
             "action": "closed",

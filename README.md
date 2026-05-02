@@ -226,13 +226,17 @@ The system uses GitHub's native [issue types](https://docs.github.com/en/issues/
 | `Feature` | `feat:` | New features and enhancements |
 | `Task` | `chore:` | Maintenance tasks, dependency updates, refactoring |
 
-The webhook reads the `issue.type.name` field from the GitHub webhook payload. Issues without a type or with an unsupported type are skipped.
+**Type detection priority:**
+1. **Native issue type** — reads `issue.type.name` from the webhook payload (available on organization repos)
+2. **Title prefix fallback** — if no native type is set, extracts the type from a `[Bug]`, `[Feature]`, or `[Task]` prefix in the issue title (works on personal repos)
+
+Issues without a detectable type or with an unsupported type are skipped.
 
 ## How It Works
 
 1. **Webhook received** — GitHub sends a POST when an issue is created or labelled
 2. **Signature validated** — HMAC-SHA256 verification ensures the payload is authentic
-3. **Issue type checked** — Only issues whose `type.name` matches a configured type proceed
+3. **Issue type checked** — Only issues whose type matches a configured type proceed (native `type.name` or `[Type]` title prefix)
 4. **Idempotency check** — Duplicate issues are detected and skipped
 5. **Devin session created** — A structured prompt with issue context and type is sent to the Devin API v3
 6. **Session polled** — The orchestrator polls session status until completion, failure, or timeout
