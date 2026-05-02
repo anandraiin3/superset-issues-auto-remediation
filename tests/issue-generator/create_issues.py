@@ -183,7 +183,9 @@ def main() -> None:
 
     limit = args.batch if args.batch > 0 else len(issues)
     selected = random.sample(issues, min(limit, len(issues)))
-    print(f"Found {len(issues)} issues. Randomly selected {len(selected)} to create on {owner_repo}...")
+    print(
+        f"Found {len(issues)} issues. Randomly selected {len(selected)} to create on {owner_repo}..."
+    )
     print()
 
     created = 0

@@ -248,14 +248,15 @@ class WebhookTestCase(unittest.TestCase):
         resp = self._post_webhook(payload)
         self.assertEqual(resp.status_code, 200)
 
-
     @patch("src.webhook.remediate_issue")
     def test_duplicate_title_skipped(self, mock_remediate) -> None:
         """Second issue with the same title should be skipped as duplicate."""
         from src.database import reserve_issue
 
         # Simulate a previously remediated issue by inserting a DB record
-        reserve_issue(60, "[Bug] UI Overlap in Dashboard", "https://github.com/test/repo")
+        reserve_issue(
+            60, "[Bug] UI Overlap in Dashboard", "https://github.com/test/repo"
+        )
 
         # Same title, different issue number — should be detected as duplicate
         payload2 = {
@@ -318,9 +319,7 @@ class WebhookTestCase(unittest.TestCase):
 
         # Mark the session as failed
         conn = _get_connection()
-        conn.execute(
-            "UPDATE sessions SET status = 'failed' WHERE issue_number = 64"
-        )
+        conn.execute("UPDATE sessions SET status = 'failed' WHERE issue_number = 64")
         conn.commit()
 
         # New issue with the same title should NOT be skipped
