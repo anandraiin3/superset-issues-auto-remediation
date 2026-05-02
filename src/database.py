@@ -100,7 +100,7 @@ def title_already_remediated(issue_title: str) -> bool:
     conn = _get_connection()
     normalised = re.sub(r"^\[\w+\]\s*", "", issue_title).strip().lower()
     rows = conn.execute(
-        "SELECT issue_title FROM sessions WHERE status != 'failed'"
+        "SELECT issue_title FROM sessions WHERE status NOT IN ('failed', 'timed_out')"
     ).fetchall()
     for row in rows:
         existing = re.sub(r"^\[\w+\]\s*", "", row["issue_title"]).strip().lower()
