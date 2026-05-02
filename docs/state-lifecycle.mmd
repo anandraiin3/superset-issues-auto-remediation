@@ -18,8 +18,12 @@ stateDiagram-v2
     }
 
     running --> completed: exit / finished
-    running --> failed: error / suspended
-    running --> timed_out: Timeout exceeded
+    running --> completed: PR created +\nwaiting → auto-close
+    running --> completed: suspended\nwith PR
+    running --> completed: timed out\nwith PR
+    running --> failed: error
+    running --> failed: suspended\n(no PR)
+    running --> timed_out: Timeout\n(no PR)
 
     completed --> [*]
     failed --> [*]
