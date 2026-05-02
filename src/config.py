@@ -3,6 +3,11 @@
 import os
 
 
+def _clean(val: str) -> str:
+    """Strip stray quotes and whitespace from an env-var value."""
+    return val.strip().strip('"').strip("'").strip()
+
+
 def _parse_csv(raw: str) -> list[str]:
     """Parse a comma-separated string into a list of trimmed, lowercased names."""
     return [item.strip().lower() for item in raw.split(",") if item.strip()]
@@ -11,12 +16,12 @@ def _parse_csv(raw: str) -> list[str]:
 class Config:
     """Centralised configuration — all values injectable via environment."""
 
-    GITHUB_WEBHOOK_SECRET: str = os.environ.get("GITHUB_WEBHOOK_SECRET", "")
-    DEVIN_API_KEY: str = os.environ.get("DEVIN_API_KEY", "")
-    DEVIN_ORG_ID: str = os.environ.get("DEVIN_ORG_ID", "")
-    GITHUB_TOKEN: str = os.environ.get("GITHUB_TOKEN", "")
-    REPOSITORY_URL: str = os.environ.get("REPOSITORY_URL", "")
-    APP_BASE_URL: str = os.environ.get("APP_BASE_URL", "")
+    GITHUB_WEBHOOK_SECRET: str = _clean(os.environ.get("GITHUB_WEBHOOK_SECRET", ""))
+    DEVIN_API_KEY: str = _clean(os.environ.get("DEVIN_API_KEY", ""))
+    DEVIN_ORG_ID: str = _clean(os.environ.get("DEVIN_ORG_ID", ""))
+    GITHUB_TOKEN: str = _clean(os.environ.get("GITHUB_TOKEN", ""))
+    REPOSITORY_URL: str = _clean(os.environ.get("REPOSITORY_URL", ""))
+    APP_BASE_URL: str = _clean(os.environ.get("APP_BASE_URL", ""))
 
     # Comma-separated list of GitHub issue types that trigger remediation.
     # Uses the native GitHub issue type field (issue.type.name).
