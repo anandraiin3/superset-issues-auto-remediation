@@ -260,7 +260,7 @@ Access the dashboard at `http://localhost:5000/dashboard` to see:
 - **Status filters** — filter by created, running, completed, failed, timed out
 - **Granular status detail** — colour-coded sub-states: `working` (green), `waiting for user` (amber), `pr_ready` (blue), `auto_closed_with_pr`, `suspended_with_pr`, `timed_out_with_pr`
 - **Cost tracking** — per-session ACU consumption and total cost across all sessions
-- **Duration tracking** — Overall (webhook → PR) and Devin (session creation → exit) in milliseconds
+- **Duration tracking** — Overall (webhook → session end) and Devin (session creation → exit) in milliseconds
 - **Live indicator** — auto-refreshes every 30 seconds with a pulse dot
 
 The UI follows [Figma's 7 UI design principles](https://www.figma.com/resource-library/ui-design-principles/) and [16 practical UI tips](https://github.com/johndelatto/step-by-step-ui-design-case-study-to-quickly-fix-an-example-user-interface-using-ui-design-tips): design tokens, WCAG AA contrast, responsive layout, visual hierarchy, and keyboard accessibility.
