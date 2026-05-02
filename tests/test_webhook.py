@@ -248,6 +248,86 @@ class WebhookTestCase(unittest.TestCase):
         resp = self._post_webhook(payload)
         self.assertEqual(resp.status_code, 200)
 
+    @patch("src.webhook.remediate_issue")
+    def test_duplicate_title_skipped(self, mock_remediate) -> None:
+        """Second issue with the same title should be skipped as duplicate."""
+        from src.database import reserve_issue
+
+        # Simulate a previously remediated issue by inserting a DB record
+        reserve_issue(
+            60, "[Bug] UI Overlap in Dashboard", "https://github.com/test/repo"
+        )
+
+        # Same title, different issue number — should be detected as duplicate
+        payload2 = {
+            "action": "opened",
+            "issue": {
+                "number": 61,
+                "title": "[Bug] UI Overlap in Dashboard",
+                "body": "Duplicate report",
+                "labels": [],
+            },
+            "repository": {"html_url": "https://github.com/test/repo"},
+        }
+        with self.assertLogs("src.webhook", level="INFO") as cm:
+            resp2 = self._post_webhook(payload2)
+        self.assertEqual(resp2.status_code, 200)
+        logs = "\n".join(cm.output)
+        self.assertIn("duplicate", logs.lower())
+
+    @patch("src.webhook.remediate_issue")
+    def test_duplicate_title_ignores_type_prefix(self, mock_remediate) -> None:
+        """Duplicate detection strips [Type] prefix before comparing."""
+        from src.database import reserve_issue
+
+        # Simulate a previously remediated [Bug] issue
+        reserve_issue(62, "[Bug] Fix alignment issue", "https://github.com/test/repo")
+
+        # Same core title but different type prefix — should still detect duplicate
+        payload2 = {
+            "action": "opened",
+            "issue": {
+                "number": 63,
+                "title": "[Task] Fix alignment issue",
+                "body": "Same fix needed",
+                "labels": [],
+            },
+            "repository": {"html_url": "https://github.com/test/repo"},
+        }
+        with self.assertLogs("src.webhook", level="INFO") as cm:
+            resp = self._post_webhook(payload2)
+        self.assertEqual(resp.status_code, 200)
+        logs = "\n".join(cm.output)
+        self.assertIn("duplicate", logs.lower())
+
+    @patch("src.webhook.remediate_issue")
+    def test_failed_session_allows_retry(self, mock_remediate) -> None:
+        """An issue whose previous session failed should be retriable."""
+        from src.database import _get_connection, reserve_issue
+
+        # Insert a session for issue 64 and mark it as failed
+        reserve_issue(64, "[Bug] Tooltip not showing", "https://github.com/test/repo")
+        conn = _get_connection()
+        conn.execute("UPDATE sessions SET status = 'failed' WHERE issue_number = 64")
+        conn.commit()
+
+        # New issue with the same title should NOT be skipped
+        payload2 = {
+            "action": "opened",
+            "issue": {
+                "number": 65,
+                "title": "[Bug] Tooltip not showing",
+                "body": "Retry after failure",
+                "labels": [],
+            },
+            "repository": {"html_url": "https://github.com/test/repo"},
+        }
+        with self.assertLogs("src.webhook", level="INFO") as cm:
+            resp = self._post_webhook(payload2)
+        self.assertEqual(resp.status_code, 200)
+        logs = "\n".join(cm.output)
+        self.assertIn("Accepted issue #65", logs)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -14,6 +14,7 @@ Environment variables (same .env as the remediation app):
 
 import argparse
 import os
+import random
 import re
 import sys
 import time
@@ -181,11 +182,14 @@ def main() -> None:
         return
 
     limit = args.batch if args.batch > 0 else len(issues)
-    print(f"Found {len(issues)} issues. Creating up to {limit} on {owner_repo}...")
+    selected = random.sample(issues, min(limit, len(issues)))
+    print(
+        f"Found {len(issues)} issues. Randomly selected {len(selected)} to create on {owner_repo}..."
+    )
     print()
 
     created = 0
-    for issue in issues[:limit]:
+    for issue in selected:
         print(f"  [{issue['type']}] {issue['title'][:80]}", end=" ... ")
 
         if args.dry_run:

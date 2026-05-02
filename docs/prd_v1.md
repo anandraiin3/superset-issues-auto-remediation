@@ -1,7 +1,7 @@
 # Product Requirements Document
 ## Event-Driven Issue Remediation System
 **Author:** Anand Rai
-**Version:** 1.6
+**Version:** 1.8
 **Date:** April 2026
 **Status:** Draft
 
@@ -422,6 +422,8 @@ CREATE INDEX idx_status ON sessions(status);
 |---|---|
 | NF-05 | Processing the same issue event twice must not create duplicate Devin sessions |
 | NF-06 | Restarting the container must not re-trigger already-completed remediations |
+| NF-13 | Issues with the same normalised title (case-insensitive, `[Type]` prefix stripped) as an existing non-failed session must be detected as duplicates and skipped |
+| NF-14 | Failed and timed-out sessions must be excluded from duplicate title matching so the same issue can be retried |
 
 ### 7.3 Security
 
@@ -515,6 +517,13 @@ The system is considered production-ready when:
 ---
 
 ## Changelog
+
+### v1.8 (May 2026)
+- **Duplicate title detection (NF-13, NF-14)**: Webhook handler now detects issues with the same normalised title as an existing session and skips them; normalisation strips `[Type]` prefix and lowercases; failed and timed-out sessions are excluded from the check so retries work
+- **Issue generator randomisation**: `create_issues.py` now uses `random.sample()` to pick random issues from the pool instead of always selecting sequentially from the top
+- **Title prefix fallback (WH-12, WH-13)**: When GitHub native `issue.type` is not available (personal repos), the webhook extracts the type from `[Bug]`/`[Feature]`/`[Task]` title prefixes; native type takes priority when both are present
+- **New DB function**: `title_already_remediated()` with normalised title comparison
+- **74 tests** (up from 71)
 
 ### v1.6 (April 2026)
 - **Automatic webhook registration (WH-09, WH-10, WH-11)**: On startup, the app auto-registers a GitHub webhook on the target repository via the GitHub API when `APP_BASE_URL` is set; idempotent (checks for existing hook before creating); gracefully skips if `APP_BASE_URL` is not configured

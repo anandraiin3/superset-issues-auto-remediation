@@ -3,6 +3,7 @@
 OB-01 – OB-07: Persists session records with full lifecycle tracking.
 """
 
+import re
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -85,6 +86,27 @@ def init_db() -> None:
             pass  # column already exists
 
     logger.info("Database initialised", extra={"event_type": "db_init"})
+
+
+def title_already_remediated(issue_title: str) -> bool:
+    """Check whether a session with the same normalised title already exists.
+
+    Strips a leading ``[Type] `` prefix (if any) so that e.g.
+    ``[Bug] Fix overlap`` matches an earlier ``[Bug] Fix overlap`` even if
+    it was filed under a different issue number.  Only non-terminal failed
+    sessions are excluded — completed, running, and created sessions all
+    count as "already handled".
+    """
+    conn = _get_connection()
+    normalised = re.sub(r"^\[\w+\]\s*", "", issue_title).strip().lower()
+    rows = conn.execute(
+        "SELECT issue_title FROM sessions WHERE status NOT IN ('failed', 'timed_out')"
+    ).fetchall()
+    for row in rows:
+        existing = re.sub(r"^\[\w+\]\s*", "", row["issue_title"]).strip().lower()
+        if existing == normalised:
+            return True
+    return False
 
 
 def session_exists_for_issue(issue_number: int) -> bool:

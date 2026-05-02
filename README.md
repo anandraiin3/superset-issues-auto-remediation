@@ -237,7 +237,7 @@ Issues without a detectable type or with an unsupported type are skipped.
 1. **Webhook received** — GitHub sends a POST when an issue is created or labelled
 2. **Signature validated** — HMAC-SHA256 verification ensures the payload is authentic
 3. **Issue type checked** — Only issues whose type matches a configured type proceed (native `type.name` or `[Type]` title prefix)
-4. **Idempotency check** — Duplicate issues are detected and skipped
+4. **Duplicate detection** — Duplicate issues are detected and skipped (both by issue number and by normalised title matching across existing sessions; failed/timed-out sessions are excluded so retries work)
 5. **Devin session created** — A structured prompt with issue context and type is sent to the Devin API v3
 6. **Session polled** — The orchestrator polls session status until completion, failure, or timeout
    - **Granular tracking**: `working` → `pr_ready` (when PR detected) → `waiting_for_user` → `completed`
@@ -303,6 +303,29 @@ Access the dashboard at `/dashboard` to see:
 - **Live indicator** — auto-refreshes every 30 seconds with a pulse dot
 
 The UI follows [Figma's 7 UI design principles](https://www.figma.com/resource-library/ui-design-principles/) and [16 practical UI tips](https://github.com/johndelatto/step-by-step-ui-design-case-study-to-quickly-fix-an-example-user-interface-using-ui-design-tips): design tokens, WCAG AA contrast, responsive layout, visual hierarchy, and keyboard accessibility.
+
+## Issue Generator (Testing Tool)
+
+A companion Docker container that creates test issues on your target repository from a curated pool of 50 real Apache Superset issues.
+
+```bash
+# Build the generator
+docker build -t issue-generator tests/issue-generator/
+
+# Create 3 random test issues (mount file so removals persist)
+docker run --env-file .env \
+  -v $(pwd)/tests/issue-generator/issues.md:/app/issues.md \
+  issue-generator --batch 3
+```
+
+**Key features:**
+- **Random selection** — each run picks random issues from the pool (not sequential)
+- **Shrinking queue** — created issues are removed from `issues.md` so they won't repeat
+- **Type-prefixed titles** — issues are titled `[Bug]`, `[Feature]`, or `[Task]` to work with the title prefix fallback
+- **Reuses `.env`** — only needs `GITHUB_TOKEN` and `REPOSITORY_URL` from your existing config
+- **Dry run** — use `--dry-run` to preview without creating issues
+
+> **Important:** Mount `issues.md` with `-v` so removals persist between container runs. Without it, each run starts from the original 50-issue pool.
 
 ## API Endpoints
 
