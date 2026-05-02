@@ -252,6 +252,56 @@ The project uses GitHub Actions for continuous integration:
 
 CI runs on every push to `main` and on all pull requests.
 
+## Deploy to Railway
+
+[Railway](https://railway.app) provides a persistent, always-on deployment with a public URL — ideal for receiving GitHub webhooks.
+
+### One-time Railway setup
+
+1. **Create a Railway account** at [railway.app](https://railway.app)
+2. **Create a new project** → "Deploy from GitHub repo" → select this repository
+3. **Add a persistent volume** in the service settings:
+   - Mount path: `/data`
+   - This stores the SQLite database (`/data/sessions.db`)
+4. **Set environment variables** in the Railway dashboard:
+
+   | Variable | Value |
+   |---|---|
+   | `GITHUB_WEBHOOK_SECRET` | `openssl rand -hex 32` (generate one) |
+   | `DEVIN_API_KEY` | Your Devin service user key (`cog_` prefix) |
+   | `DEVIN_ORG_ID` | Your Devin organisation ID |
+   | `GITHUB_TOKEN` | GitHub PAT with Issues R/W + Webhooks R/W |
+   | `REPOSITORY_URL` | `https://github.com/your-org/your-repo` |
+   | `APP_BASE_URL` | Your Railway public URL (e.g., `https://your-app.up.railway.app`) |
+
+5. **Get your public URL**: Railway auto-assigns one (Settings → Networking → Public Networking). Use this as `APP_BASE_URL`.
+6. Deploy — the app will auto-register the webhook on the target repository.
+
+### Auto-deploy via GitHub Actions
+
+A deploy workflow (`.github/workflows/deploy.yml`) auto-deploys to Railway on every push to `main`.
+
+**Setup:**
+
+1. In your Railway project, go to **Settings → Tokens** and create a project token.
+2. In your GitHub repository, go to **Settings → Secrets and variables → Actions**:
+   - Add secret: `RAILWAY_TOKEN` = your Railway project token
+   - Add variable: `RAILWAY_SERVICE_ID` = your Railway service ID (found in service settings URL)
+
+After setup, every merge to `main` triggers:
+1. CI (lint + test + docker-build) — must pass first
+2. Deploy to Railway — uses the Railway CLI to push the latest code
+
+### Verify deployment
+
+```bash
+# Health check
+curl https://your-app.up.railway.app/health
+
+# View dashboard
+open https://your-app.up.railway.app/dashboard
+```
+
 ## Development
 
 ### Run locally (without Docker)
@@ -318,4 +368,5 @@ The UI follows [Figma's 7 UI design principles](https://www.figma.com/resource-l
 | Observability store | SQLite |
 | Dashboard | Flask + Jinja2 |
 | Containerisation | Docker + docker-compose |
-| CI | GitHub Actions |
+| Hosting | Railway (recommended) |
+| CI/CD | GitHub Actions (lint, test, deploy) |

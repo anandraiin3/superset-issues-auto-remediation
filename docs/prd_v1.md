@@ -479,6 +479,16 @@ All configuration injected via environment variables:
 | Observability store | SQLite | Zero-dependency, sufficient for single-repository scale, durable |
 | Dashboard | Flask + Jinja2 | Simple server-rendered HTML, no frontend build step required |
 | Containerisation | Docker + docker-compose | Reproducible, portable, single-command deployment |
+| Hosting | Railway | Persistent always-on deployment with public URL, volume support |
+| CI/CD | GitHub Actions | Lint, test, Docker build, auto-deploy to Railway on merge |
+
+### Deployment Requirements
+
+|| ID | Requirement | Priority |
+||---|---|---|
+|| DP-01 | System must support deployment to Railway with Dockerfile-based builds and health checks | Must Have |
+|| DP-02 | Auto-deploy to production (Railway) must be triggered via GitHub Actions on push to `main` | Should Have |
+|| DP-03 | SQLite database must persist across deployments via a mounted volume at `/data` | Must Have |
 
 ---
 
@@ -510,11 +520,17 @@ The system is considered production-ready when:
 
 ---
 
-*PRD Version 1.6 — Anand Rai — April 2026*
+*PRD Version 1.7 — Anand Rai — April 2026*
 
 ---
 
 ## Changelog
+
+### v1.7 (May 2026)
+- **Railway deployment (DP-01, DP-02, DP-03)**: Added `railway.toml` for Railway platform deployment with health check, persistent volume for SQLite, and restart policy
+- **Auto-deploy workflow (DP-02)**: GitHub Actions workflow (`.github/workflows/deploy.yml`) auto-deploys to Railway on push to `main` using Railway CLI
+- **README updated**: Comprehensive Railway setup instructions including one-time setup, env vars, volume mount, auto-deploy workflow, and verification steps
+- **New requirements**: DP-01 (Railway deployment support), DP-02 (CI/CD auto-deploy), DP-03 (persistent storage on Railway)
 
 ### v1.6 (April 2026)
 - **Automatic webhook registration (WH-09, WH-10, WH-11)**: On startup, the app auto-registers a GitHub webhook on the target repository via the GitHub API when `APP_BASE_URL` is set; idempotent (checks for existing hook before creating); gracefully skips if `APP_BASE_URL` is not configured
