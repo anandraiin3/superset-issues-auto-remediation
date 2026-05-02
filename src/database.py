@@ -359,7 +359,7 @@ def get_dashboard_stats() -> dict:
 
     # Compute average overall time (webhook → session end) in ms for completed sessions
     completed_rows = conn.execute(
-        "SELECT created_at, completed_at FROM sessions WHERE completed_at IS NOT NULL"
+        "SELECT created_at, completed_at FROM sessions WHERE status = 'completed' AND completed_at IS NOT NULL"
     ).fetchall()
     overall_ms_values = []
     for r in completed_rows:
