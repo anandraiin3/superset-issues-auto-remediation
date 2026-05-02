@@ -303,10 +303,11 @@ def _ts_to_aware(raw: str) -> datetime:
 
 def _enrich_durations(row: dict) -> dict:
     """Add computed overall_time_ms and devin_time_ms to a session dict."""
-    # Overall time: webhook trigger (created_at) → PR raised (pr_raised_at)
+    # Overall time: webhook trigger (created_at) → session end (completed_at)
+    # This is the full end-to-end lifecycle and is always ≥ Devin time.
     overall_ms: Optional[int] = None
-    if row.get("created_at") and row.get("pr_raised_at"):
-        delta = _ts_to_aware(row["pr_raised_at"]) - _ts_to_aware(row["created_at"])
+    if row.get("created_at") and row.get("completed_at"):
+        delta = _ts_to_aware(row["completed_at"]) - _ts_to_aware(row["created_at"])
         overall_ms = int(delta.total_seconds() * 1000)
 
     # Devin time: session creation (devin_started_at) → session exit (completed_at)
@@ -356,14 +357,14 @@ def get_dashboard_stats() -> dict:
 
     success_rate = (completed / total * 100) if total > 0 else 0.0
 
-    # Compute average overall time (webhook → PR) in ms for completed sessions
-    rows_with_pr = conn.execute(
-        "SELECT created_at, pr_raised_at FROM sessions WHERE pr_raised_at IS NOT NULL"
+    # Compute average overall time (webhook → session end) in ms for completed sessions
+    completed_rows = conn.execute(
+        "SELECT created_at, completed_at FROM sessions WHERE completed_at IS NOT NULL"
     ).fetchall()
     overall_ms_values = []
-    for r in rows_with_pr:
-        if r["created_at"] and r["pr_raised_at"]:
-            delta = _ts_to_aware(r["pr_raised_at"]) - _ts_to_aware(r["created_at"])
+    for r in completed_rows:
+        if r["created_at"] and r["completed_at"]:
+            delta = _ts_to_aware(r["completed_at"]) - _ts_to_aware(r["created_at"])
             overall_ms_values.append(int(delta.total_seconds() * 1000))
     avg_overall_ms = (
         int(sum(overall_ms_values) / len(overall_ms_values)) if overall_ms_values else 0

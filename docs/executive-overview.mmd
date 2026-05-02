@@ -1,0 +1,82 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1f6feb', 'primaryTextColor': '#e6edf3', 'primaryBorderColor': '#388bfd', 'lineColor': '#8b949e', 'secondaryColor': '#161b22', 'tertiaryColor': '#0d1117', 'fontSize': '14px', 'fontFamily': 'Inter, system-ui, sans-serif'}}}%%
+flowchart TB
+    %% ── Problem Framing ──────────────────────────────────────
+    subgraph PROBLEM["🔴 THE PROBLEM — Manual Issue Remediation"]
+        direction LR
+        P1["Developer sees\nGitHub issue"]
+        P2["Reads codebase\n& diagnoses"]
+        P3["Writes fix\n& tests"]
+        P4["Opens PR\n& waits for review"]
+        P1 --> P2 --> P3 --> P4
+        P5["⏱ Hours to days per issue\n💰 High developer cost\n📉 Backlog grows faster than fixes"]
+    end
+
+    %% ── Solution ─────────────────────────────────────────────
+    subgraph SOLUTION["🟢 THE SOLUTION — Autonomous Issue Remediation Engine"]
+        direction TB
+
+        %% Trigger
+        subgraph TRIGGER["① Issue Created"]
+            I1["Developer or user\nopens GitHub issue"]
+            I2["Type: Bug / Feature / Task"]
+            I1 --> I2
+        end
+
+        %% Ingestion
+        subgraph INGEST["② Webhook Ingestion"]
+            W1["GitHub sends\nwebhook POST"]
+            W2["HMAC-SHA256\nsignature check"]
+            W3["Issue type\ndetection"]
+            W4["Duplicate\ndetection"]
+            W1 --> W2 --> W3 --> W4
+        end
+
+        %% AI Remediation
+        subgraph AI["③ AI Remediation (Devin)"]
+            D1["Create Devin\nAPI session"]
+            D2["Devin reads code,\nimplements fix"]
+            D3["Devin opens\nPull Request"]
+            D4["Session auto-closed\n& archived"]
+            D1 --> D2 --> D3 --> D4
+        end
+
+        %% Observability
+        subgraph OBS["④ Observability & Tracking"]
+            O1["SQLite stores\nsession lifecycle"]
+            O2["Real-time\nDashboard"]
+            O3["Auto-comments\non GitHub issue"]
+            O1 --> O2
+            O1 --> O3
+        end
+
+        TRIGGER --> INGEST --> AI --> OBS
+    end
+
+    %% ── Outcomes ─────────────────────────────────────────────
+    subgraph OUTCOMES["📊 OUTCOMES"]
+        direction LR
+        R1["⚡ Minutes not hours\nIssue → PR in minutes"]
+        R2["💰 Lower cost\nAI at fraction of\ndeveloper hourly rate"]
+        R3["📈 Zero backlog growth\nEvery issue gets\nimmediate attention"]
+        R4["👁 Full visibility\nDashboard tracks\nstatus, cost, timing"]
+    end
+
+    PROBLEM --> SOLUTION
+    SOLUTION --> OUTCOMES
+
+    %% ── Styling ──────────────────────────────────────────────
+    classDef problem fill:#3d1a1a,stroke:#f85149,color:#ffa198
+    classDef solution fill:#0d2818,stroke:#3fb950,color:#7ee787
+    classDef trigger fill:#1a1a3d,stroke:#8b8bfd,color:#c4c4ff
+    classDef ingest fill:#1a2a3d,stroke:#58a6ff,color:#a5d6ff
+    classDef ai fill:#2a1a3d,stroke:#bc8cff,color:#d8b4fe
+    classDef obs fill:#1a3d2a,stroke:#56d364,color:#7ee787
+    classDef outcomes fill:#3d2a0d,stroke:#d29922,color:#e6c458
+
+    class PROBLEM problem
+    class SOLUTION solution
+    class TRIGGER trigger
+    class INGEST ingest
+    class AI ai
+    class OBS obs
+    class OUTCOMES outcomes

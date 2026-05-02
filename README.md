@@ -1,6 +1,6 @@
-# Superset Issues Auto-Remediation
+# Autonomous Issue Remediation Engine
 
-Event-driven issue remediation system that automatically detects GitHub issues by their native **issue type** (`Bug`, `Feature`, `Task`) and triggers [Devin AI](https://devin.ai) sessions to analyse, implement, and open pull requests.
+Event-driven issue remediation system that automatically detects GitHub issues by type (`Bug`, `Feature`, `Task`) and triggers [Devin AI](https://devin.ai) sessions to analyse, implement, and open pull requests — fully autonomous, zero human intervention.
 
 ## Architecture
 
@@ -18,30 +18,34 @@ GitHub Issue (type: Bug / Feature / Task)
                         (granular status)       GitHub Issue
 ```
 
-See [`docs/prd_v1.md`](docs/prd_v1.md) for full architecture, [workflow diagram](docs/workflow-diagram.png), and [state lifecycle](docs/state-lifecycle.png).
+See [`docs/prd_v1.md`](docs/prd_v1.md) for full architecture, [executive overview](docs/executive-overview.mmd), and [state lifecycle](docs/state-lifecycle.mmd).
 
-## Quick Start
+---
+
+## Quick Start (Podman + ngrok)
+
+This is the recommended local setup using **Podman** for container management and **ngrok** to expose the app to GitHub webhooks.
 
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/anandraiin3/superset-issues-auto-remediation.git
-cd superset-issues-auto-remediation
+git clone https://github.com/anandraiin3/Autonomous-Issue-Remediation-Engine.git
+cd Autonomous-Issue-Remediation-Engine
 cp .env.example .env
 ```
 
-Edit `.env` with your actual credentials (see [Credentials Setup](#credentials-setup) below for details on each key):
+Edit `.env` with your credentials (see [Credentials Setup](#credentials-setup) for details on each key):
 
 ```env
 # Required
-GITHUB_WEBHOOK_SECRET=your_webhook_secret_here
+GITHUB_WEBHOOK_SECRET=<run: openssl rand -hex 32>
 DEVIN_API_KEY=cog_your_devin_service_user_key
 DEVIN_ORG_ID=your_devin_org_id
 GITHUB_TOKEN=ghp_your_github_personal_access_token
 REPOSITORY_URL=https://github.com/your-org/your-repo
 
 # Optional — set to auto-register webhook on startup
-APP_BASE_URL=https://your-server.example.com
+APP_BASE_URL=https://your-ngrok-url.ngrok-free.app
 
 # Optional — defaults shown
 ISSUE_TYPES=bug,feature,task
@@ -51,85 +55,78 @@ DATABASE_PATH=/data/sessions.db
 DASHBOARD_PORT=5000
 ```
 
-### 2. Run with Docker Compose (recommended)
+### 2. Build the container image
 
 ```bash
-docker-compose up --build
+podman build -t superset-remediation .
 ```
 
-This builds the image and starts the container with:
-- Webhook listener on **port 5000** at `/webhook`
-- Operations dashboard at `/dashboard`
-- Health check at `/health`
-- Persistent SQLite storage via a Docker volume (`session-data:/data`)
-- Auto-restart on failure (`unless-stopped` policy)
-
-### 3. Run with Docker (standalone)
-
-If you prefer running the Docker container directly without Compose:
+### 3. Start the app
 
 ```bash
-# Build the image
-docker build -t superset-remediation .
-
-# Run the container
-docker run -d \
-  --name superset-remediation \
-  -p 5000:5000 \
-  -v superset-session-data:/data \
-  -e GITHUB_WEBHOOK_SECRET="your_webhook_secret" \
-  -e DEVIN_API_KEY="cog_your_devin_service_user_key" \
-  -e DEVIN_ORG_ID="your_devin_org_id" \
-  -e GITHUB_TOKEN="ghp_your_github_token" \
-  -e REPOSITORY_URL="https://github.com/your-org/your-repo" \
-  -e ISSUE_TYPES="bug,feature,task" \
-  -e POLLING_INTERVAL_SECONDS=30 \
-  -e SESSION_TIMEOUT_MINUTES=45 \
-  -e DATABASE_PATH=/data/sessions.db \
-  superset-remediation
-```
-
-Alternatively, pass all env vars from a file:
-
-```bash
-docker run -d \
-  --name superset-remediation \
+podman run --rm \
   -p 5000:5000 \
   -v superset-session-data:/data \
   --env-file .env \
   superset-remediation
 ```
 
-### 4. Configure GitHub Webhook
+This starts:
+- Webhook listener on **port 5000** at `/webhook`
+- Operations dashboard at `/dashboard`
+- Health check at `/health`
+- Persistent SQLite storage via a Podman volume (`superset-session-data:/data`)
+
+> **Tip:** If you changed `DASHBOARD_PORT` in `.env` (e.g. `DASHBOARD_PORT=5010`), update the `-p` flag to match: `-p 5010:5010`.
+
+### 4. Expose with ngrok
+
+In a separate terminal, expose your local app to the internet:
+
+```bash
+ngrok http 5000
+```
+
+Copy the public URL ngrok gives you (e.g. `https://abc123.ngrok-free.app`).
+
+### 5. Configure the GitHub webhook
 
 **Option A — Automatic registration (recommended):**
 
-Set `APP_BASE_URL` in your `.env` to the public URL of your server:
-
-```env
-APP_BASE_URL=https://your-server.example.com
-```
-
-On startup, the app will automatically register a webhook on the repository specified in `REPOSITORY_URL`. If a matching webhook already exists, it updates the config. If `APP_BASE_URL` is not set, auto-registration is skipped.
+1. Stop the running container (`Ctrl+C`)
+2. Update `APP_BASE_URL` in your `.env` to the ngrok URL:
+   ```env
+   APP_BASE_URL=https://abc123.ngrok-free.app
+   ```
+3. Restart the container:
+   ```bash
+   podman run --rm \
+     -p 5000:5000 \
+     -v superset-session-data:/data \
+     --env-file .env \
+     superset-remediation
+   ```
+4. The app auto-registers a webhook at `https://abc123.ngrok-free.app/webhook` on your repo. Check the logs for:
+   ```
+   webhook_registered — Webhook registered on your-org/your-repo (id=...)
+   ```
 
 > Requires `GITHUB_TOKEN` with **Webhooks: Read & Write** permission.
 
 **Option B — Manual registration:**
 
 1. Go to your GitHub repository **Settings → Webhooks → Add webhook**
-2. Set **Payload URL** to `https://your-server:5000/webhook`
+2. Set **Payload URL** to `https://abc123.ngrok-free.app/webhook`
 3. Set **Content type** to `application/json`
-4. Set **Secret** to match your `GITHUB_WEBHOOK_SECRET`
+4. Set **Secret** to the same value as your `GITHUB_WEBHOOK_SECRET`
 5. Select **Let me select individual events** → check **Issues**
 6. Save
 
-> **Note:** The server must be publicly reachable for GitHub to deliver webhooks. Use a reverse proxy (nginx, Caddy) or a tunnel (ngrok, Cloudflare Tunnel) if running behind NAT.
+### 6. Test the setup
 
-### 5. Enable Issue Types
+Create an issue on your target repo with a type of `Bug`, `Feature`, or `Task` (or prefix the title with `[Bug]`, `[Feature]`, or `[Task]` on personal repos). Watch the app logs — you'll see the webhook received and a Devin session created.
 
-Issue types (`Bug`, `Feature`, `Task`) are a native GitHub feature. To enable them:
-1. Go to your **Organization Settings → Issue Types**
-2. Ensure the desired types are enabled
+Open `http://localhost:5000/dashboard` to see the session on the Remediation Operations Dashboard.
 
 ---
 
@@ -142,7 +139,7 @@ A **service user API key** with `cog_` prefix is required.
 1. Go to [app.devin.ai/settings](https://app.devin.ai/settings) → **Service Users**
 2. Create a service user (or use an existing one)
 3. Generate an API key — it will start with `cog_`
-4. **Required permission:** `ManageOrgSessions` (to create, retrieve, and list sessions)
+4. **Required permission:** `ManageOrgSessions` (to create, retrieve, terminate, and list sessions)
 
 > Legacy keys with `apk_` prefix will **not** work with the v3 API.
 
@@ -159,7 +156,7 @@ A GitHub personal access token is used to post auto-comments on issues when Devi
 
 | Permission | Scope | Why |
 |---|---|---|
-| **Issues** | Read & Write | Post Devin’s questions as comments on issues |
+| **Issues** | Read & Write | Post Devin's questions as comments on issues |
 | **Webhooks** | Read & Write | Required for automatic webhook registration (when `APP_BASE_URL` is set) |
 | **Contents** | Read | Devin needs to read repo contents for remediation |
 
@@ -179,14 +176,13 @@ A GitHub personal access token is used to post auto-comments on issues when Devi
 
 ### GitHub Webhook Secret (`GITHUB_WEBHOOK_SECRET`)
 
-A shared secret string used to validate webhook payloads via HMAC-SHA256. Choose any random string:
+A shared secret string used to validate webhook payloads via HMAC-SHA256. Generate one:
 
 ```bash
-# Generate a random secret
 openssl rand -hex 32
 ```
 
-Use the same value in your `.env` file and when configuring the webhook in GitHub (step 4 above).
+Use the same value in your `.env` file and when configuring the webhook in GitHub (step 5 above).
 
 ### Repository URL (`REPOSITORY_URL`)
 
@@ -197,6 +193,8 @@ https://github.com/your-org/your-repo
 ```
 
 This is used to construct issue links, PR links, and context for Devin sessions.
+
+---
 
 ## Configuration
 
@@ -209,12 +207,14 @@ All configuration is injected via environment variables:
 | `DEVIN_ORG_ID` | Devin organisation ID (Settings → Service Users) | — | Yes |
 | `GITHUB_TOKEN` | GitHub personal access token (see [Credentials Setup](#credentials-setup)) | — | Yes (for auto-comments) |
 | `REPOSITORY_URL` | Target GitHub repository URL | — | Yes |
-| `APP_BASE_URL` | Public base URL of this app (enables automatic webhook registration on startup) | — | No |
+| `APP_BASE_URL` | Public base URL of this app (enables auto webhook registration); use your ngrok URL here | — | No |
 | `ISSUE_TYPES` | Comma-separated list of GitHub issue types that trigger remediation | `bug,feature,task` | No |
 | `POLLING_INTERVAL_SECONDS` | Devin session poll interval | `30` | No |
 | `SESSION_TIMEOUT_MINUTES` | Max session duration before timeout | `45` | No |
 | `DATABASE_PATH` | SQLite database file path | `/data/sessions.db` | No |
 | `DASHBOARD_PORT` | Dashboard HTTP port | `5000` | No |
+
+---
 
 ## Supported Issue Types
 
@@ -232,6 +232,8 @@ The system uses GitHub's native [issue types](https://docs.github.com/en/issues/
 
 Issues without a detectable type or with an unsupported type are skipped.
 
+---
+
 ## How It Works
 
 1. **Webhook received** — GitHub sends a POST when an issue is created or labelled
@@ -242,9 +244,67 @@ Issues without a detectable type or with an unsupported type are skipped.
 6. **Session polled** — The orchestrator polls session status until completion, failure, or timeout
    - **Granular tracking**: `working` → `pr_ready` (when PR detected) → `waiting_for_user` → `completed`
    - **Auto-comment**: When Devin asks an issue-related question, it's posted back to the GitHub issue
+   - **Auto-close**: When a PR is created and the session goes idle, it's archived and marked completed
    - Infrastructure questions (permissions, tokens) are filtered out and NOT posted
 7. **Result recorded** — PR URL, status detail, ACU cost, and timing metrics are persisted to SQLite
 8. **Dashboard updated** — Real-time view with clickable issue/PR/session links, granular status, and cost tracking
+
+---
+
+## Remediation Operations Dashboard
+
+Access the dashboard at `http://localhost:5000/dashboard` to see:
+
+- **Key metrics** — session counts, success rate, average overall time (ms), total cost (ACUs)
+- **Session table** — each row shows issue (linked to GitHub), status badge + sub-state, action links (PR + Devin session), cost, timing (Overall ms, Devin ms), and created timestamp
+- **Status filters** — filter by created, running, completed, failed, timed out
+- **Granular status detail** — colour-coded sub-states: `working` (green), `waiting for user` (amber), `pr_ready` (blue), `auto_closed_with_pr`, `suspended_with_pr`, `timed_out_with_pr`
+- **Cost tracking** — per-session ACU consumption and total cost across all sessions
+- **Duration tracking** — Overall (webhook → PR) and Devin (session creation → exit) in milliseconds
+- **Live indicator** — auto-refreshes every 30 seconds with a pulse dot
+
+The UI follows [Figma's 7 UI design principles](https://www.figma.com/resource-library/ui-design-principles/) and [16 practical UI tips](https://github.com/johndelatto/step-by-step-ui-design-case-study-to-quickly-fix-an-example-user-interface-using-ui-design-tips): design tokens, WCAG AA contrast, responsive layout, visual hierarchy, and keyboard accessibility.
+
+---
+
+## Issue Generator (Testing Tool)
+
+A companion container that creates test issues on your target repository from a curated pool of 50 real Apache Superset issues. See [`tests/issue-generator/README.md`](tests/issue-generator/README.md) for full documentation.
+
+**Quick start:**
+
+```bash
+# Build the generator image
+podman build -t issue-generator tests/issue-generator/
+
+# Create 3 random test issues (mount file so removals persist)
+podman run --env-file .env \
+  -v $(pwd)/tests/issue-generator/issues.md:/app/issues.md \
+  issue-generator --batch 3
+```
+
+**Key features:**
+- **Random selection** — each run picks random issues from the pool (not sequential)
+- **Shrinking queue** — created issues are removed from `issues.md` so they won't repeat
+- **Type-prefixed titles** — issues are titled `[Bug]`, `[Feature]`, or `[Task]` to work with the title prefix fallback
+- **Reuses `.env`** — only needs `GITHUB_TOKEN` and `REPOSITORY_URL` from your existing config
+- **Dry run** — use `--dry-run` to preview without creating issues
+
+> **Important:** Mount `issues.md` with `-v` so removals persist between container runs. Without it, each run starts from the original 50-issue pool.
+
+---
+
+## Alternative: Docker Compose
+
+If you prefer Docker Compose over standalone Podman:
+
+```bash
+docker-compose up --build
+```
+
+This builds the image and starts the container with persistent storage and auto-restart.
+
+---
 
 ## CI/CD
 
@@ -256,9 +316,11 @@ The project uses GitHub Actions for continuous integration:
 
 CI runs on every push to `main` and on all pull requests.
 
+---
+
 ## Development
 
-### Run locally (without Docker)
+### Run locally (without container)
 
 ```bash
 python -m venv venv
@@ -290,49 +352,14 @@ ruff check src/ tests/ app.py
 ruff format --check src/ tests/ app.py
 ```
 
-## Remediation Operations Dashboard
-
-Access the dashboard at `/dashboard` to see:
-
-- **Key metrics** — session counts, success rate, average overall time (ms), total cost (ACUs)
-- **Session table** — each row shows issue (linked to GitHub), status badge + sub-state, action links (PR + Devin session), cost, timing (Overall ms, Devin ms), and created timestamp
-- **Status filters** — filter by created, running, completed, failed, timed out
-- **Granular status detail** — colour-coded sub-states: `working` (green), `waiting for user` (amber), `pr_ready` (blue)
-- **Cost tracking** — per-session ACU consumption and total cost across all sessions
-- **Duration tracking** — Overall (webhook → PR) and Devin (session creation → exit) in milliseconds
-- **Live indicator** — auto-refreshes every 30 seconds with a pulse dot
-
-The UI follows [Figma's 7 UI design principles](https://www.figma.com/resource-library/ui-design-principles/) and [16 practical UI tips](https://github.com/johndelatto/step-by-step-ui-design-case-study-to-quickly-fix-an-example-user-interface-using-ui-design-tips): design tokens, WCAG AA contrast, responsive layout, visual hierarchy, and keyboard accessibility.
-
-## Issue Generator (Testing Tool)
-
-A companion Docker container that creates test issues on your target repository from a curated pool of 50 real Apache Superset issues.
-
-```bash
-# Build the generator
-docker build -t issue-generator tests/issue-generator/
-
-# Create 3 random test issues (mount file so removals persist)
-docker run --env-file .env \
-  -v $(pwd)/tests/issue-generator/issues.md:/app/issues.md \
-  issue-generator --batch 3
-```
-
-**Key features:**
-- **Random selection** — each run picks random issues from the pool (not sequential)
-- **Shrinking queue** — created issues are removed from `issues.md` so they won't repeat
-- **Type-prefixed titles** — issues are titled `[Bug]`, `[Feature]`, or `[Task]` to work with the title prefix fallback
-- **Reuses `.env`** — only needs `GITHUB_TOKEN` and `REPOSITORY_URL` from your existing config
-- **Dry run** — use `--dry-run` to preview without creating issues
-
-> **Important:** Mount `issues.md` with `-v` so removals persist between container runs. Without it, each run starts from the original 50-issue pool.
+---
 
 ## API Endpoints
 
 | Endpoint | Method | Description |
 |---|---|---|
 | `/webhook` | POST | GitHub webhook receiver |
-| `/dashboard` | GET | Operations dashboard |
+| `/dashboard` | GET | Remediation Operations Dashboard |
 | `/health` | GET | Health check |
 
 ## Tech Stack
@@ -344,5 +371,6 @@ docker run --env-file .env \
 | Session manager | Python + requests (Devin API v3) |
 | Observability store | SQLite |
 | Dashboard | Flask + Jinja2 |
-| Containerisation | Docker + docker-compose |
+| Containerisation | Podman / Docker |
+| Tunnel | ngrok |
 | CI | GitHub Actions |
