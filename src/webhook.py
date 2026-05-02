@@ -7,6 +7,7 @@ and dispatches remediation asynchronously.
 
 import hashlib
 import hmac
+import re
 import threading
 from typing import Any
 
@@ -58,14 +59,28 @@ def _process_job(
 def _get_issue_type(issue: dict[str, Any]) -> str | None:
     """Extract the GitHub issue type name from the issue payload.
 
-    GitHub issue types are a native first-class field:
-      issue.type = {"id": ..., "name": "Bug", "description": ...}
-    Returns the lowercased type name, or None if not set.
+    Priority:
+      1. Native GitHub issue type field (org repos):
+         issue.type = {"id": ..., "name": "Bug", ...}
+      2. Title prefix fallback (personal repos / issue generator):
+         "[Bug] Fix something" → "bug"
+
+    Returns the lowercased type name, or None if not detected.
     """
     type_obj = issue.get("type")
     if type_obj and isinstance(type_obj, dict):
         name = type_obj.get("name", "")
-        return name.lower() if name else None
+        if name:
+            return name.lower()
+
+    # Fallback: extract from [Type] title prefix
+    title = issue.get("title", "")
+    prefix_match = re.match(r"^\[(\w+)\]", title)
+    if prefix_match:
+        prefix = prefix_match.group(1).lower()
+        if prefix in Config.ISSUE_TYPES:
+            return prefix
+
     return None
 
 
