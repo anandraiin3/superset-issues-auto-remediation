@@ -370,18 +370,22 @@ def remediate_issue(
             # (waiting_for_user, waiting_for_approval) terminate it and
             # mark as completed.  This prevents sessions from lingering
             # after their remediation goal (a PR) has been achieved.
-            if pr_url and status_detail in ("waiting_for_user", "waiting_for_approval"):
+            effective_pr = pr_url or last_known_pr
+            if effective_pr and status_detail in (
+                "waiting_for_user",
+                "waiting_for_approval",
+            ):
                 terminated = _finish_devin_session(session_id)
                 update_session_status(
                     session_id,
                     "completed",
                     status_detail="auto_closed_with_pr",
-                    pr_url=pr_url,
+                    pr_url=effective_pr,
                     acus_consumed=acus,
                 )
                 logger.info(
                     f"Session {session_id} auto-closed after PR created "
-                    f"(terminated={terminated}, PR: {pr_url})",
+                    f"(terminated={terminated}, PR: {effective_pr})",
                     extra={**log_extra, "event_type": "session_auto_closed"},
                 )
                 return
@@ -424,16 +428,17 @@ def remediate_issue(
             # a PR, triggering an inactivity suspension.
             if status == "suspended":
                 reason = status_detail or status
-                if pr_url:
+                suspended_pr = pr_url or last_known_pr
+                if suspended_pr:
                     update_session_status(
                         session_id,
                         "completed",
                         status_detail="suspended_with_pr",
-                        pr_url=pr_url,
+                        pr_url=suspended_pr,
                         acus_consumed=acus,
                     )
                     logger.info(
-                        f"Session {session_id} suspended but PR exists — marking completed (PR: {pr_url})",
+                        f"Session {session_id} suspended but PR exists — marking completed (PR: {suspended_pr})",
                         extra={**log_extra, "event_type": "session_completed"},
                     )
                 else:
