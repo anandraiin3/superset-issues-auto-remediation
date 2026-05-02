@@ -4,7 +4,7 @@ Issues sourced from [apache/superset](https://github.com/apache/superset) for te
 Each issue is created against the target repository by the issue generator container.
 Issues are removed from this file after successful creation.
 
-**Total: 50 issues** (Bug: 16, Feature: 17, Task: 17)
+**Total: 47 issues** (Bug: 15, Feature: 17, Task: 15)
 
 ## Bug
 
@@ -43,46 +43,6 @@ _No response_
 
 ### Checklist
 
-- [x] I have searched Superset docs and Slack and didn't find a solution to my problem.
-- [x] I have searched the GitHub issue tracker and didn't find a similar bug report.
-- [x] I have checked Superset's logs for errors and if I found a relevant Python stacktrace, I included it here as text in the "additional context" section.
-
----
-
-### [Bug] Unexpected focus outline (blue border) on Filter Badge popover
-
-**Source:** [https://github.com/apache/superset/issues/38789](https://github.com/apache/superset/issues/38789)
-**Type:** Bug
-
-### Bug description
-After page refresh, when hovering over the Filter Badge (indicator showing the count of applied filters) on a dashboard chart, a default blue focus outline appears around the popover container. This visual artifact is inconsistent with the rest of the Superset UI.
-
-### How to reproduce the bug
-1. Open a dashboard with filters and apply filters.
-2. Refresh the page
-3. Hover over the Filter Badge (the "1" or "2" icon next to the filter funnel).
-4. Observe the blue border appearing around the "Applied filters" popover.
-
-### Screenshots/recordings
-
-https://github.com/user-attachments/assets/f49e35ef-ae4f-460e-a194-220fb4ba0b7a
-
-### Superset version
-master / latest-dev
-
-### Python version
-3.9
-
-### Node version
-16
-
-### Browser
-Chrome
-
-### Additional context
-No response
-
-### Checklist
 - [x] I have searched Superset docs and Slack and didn't find a solution to my problem.
 - [x] I have searched the GitHub issue tracker and didn't find a similar bug report.
 - [x] I have checked Superset's logs for errors and if I found a relevant Python stacktrace, I included it here as text in the "additional context" section.
@@ -302,8 +262,6 @@ Bug Description:
 
 Changing Color Scheme had no effect beyond changing the colors used. No custom CSS were used.
 I could test other versions, if that would be of help.
-
-
 
 ### Screenshots/recordings
 
@@ -609,13 +567,8 @@ The stacking functionality for bar charts was introduced recently, but it broke 
 When selecting Only Total, then Instead of displaying the number for each bar, it now shows a single value for the entire cluster. In the example below, it should show two separate numbers, not just one.
 ![Image](https://github.com/user-attachments/assets/8c322e4c-62fb-47bf-b8ca-fb60817d2304)
 
-
-
 When Only Total is unselected, it is completely broken
 ![Image](https://github.com/user-attachments/assets/54eeb504-faf1-43ee-8e34-92db824f6daa)
-
-
-
 
 ### Superset version
 
@@ -681,7 +634,6 @@ FEATURE_FLAGS = {
     "GLOBAL_ASYNC_QUERIES": False,
 }
 
-
 Troubleshooting we've tried:
 
 We even tried using the solo pool instead of prefork to avoid any potential cluster issues, by running:
@@ -746,7 +698,6 @@ Example of implementation using Google Sheet: https://docs.google.com/spreadshee
 The chart groups **User Stories (blue bars)** and **Bugs (red + yellow bars)** by Agile sprints. At the same time, **Bugs are stacked** to show priority levels (**red for Priority 1, yellow for Priority 2/3**).  
 
 The **green line** represents efficiency across sprints, while the **light red line** is an automatically calculated **trend line for Priority 1 Bugs**.
-
 
 ![Image](https://github.com/user-attachments/assets/31c1fab7-ad51-4cf0-8f04-39531d230933)
 
@@ -823,7 +774,6 @@ Traceback (most recent call last):
   File "/app/.venv/lib/python3.10/site-packages/jwt/api_jwt.py", line 300, in _validate_sub
     raise InvalidSubjectError("Subject must be a string")
 jwt.exceptions.InvalidSubjectError: Subject must be a string
-
 
 The root cause is that sub claim is not set on async_access cookie token [register_request_handlers](https://github.com/apache/superset/blob/2696d3e8004db8e5a3e83a96a3b2cb0b60de327c/superset/async_events/async_query_manager.py#L165):
 
@@ -1066,7 +1016,6 @@ Occurs in both horizontal and vertical orientation.
 
 Browser:
 Google Chrome 143.0.7499.193 (Official Build) (arm64)
-
 
 ### Screenshots/recordings
 
@@ -1400,8 +1349,6 @@ BABEL_DEFAULT_LOCALE = "ru"
 `
  to the file, the language selection appeared, but selecting it produces an error in the logs.
 
-
-
 <img width="957" height="247" alt="Image" src="https://github.com/user-attachments/assets/94d54c4f-733a-4db9-b5ac-6758041ca192" />
 
 <img width="957" height="145" alt="Image" src="https://github.com/user-attachments/assets/a15f5ae5-d7d3-4837-8397-b08e3b311fe6" />
@@ -1448,84 +1395,6 @@ _No response_
 - [x] I have searched Superset docs and Slack and didn't find a solution to my problem.
 - [x] I have searched the GitHub issue tracker and didn't find a similar bug report.
 - [ ] I have checked Superset's logs for errors and if I found a relevant Python stacktrace, I included it here as text in the "additional context" section.
-
----
-
-### [Task] docker compose up --build fails on 5.0.0 with No matching distribution found for uv
-
-**Source:** [https://github.com/apache/superset/issues/35607](https://github.com/apache/superset/issues/35607)
-**Type:** Task
-
-### Bug description
-
-
-**Description:**
-When trying to build Superset from the 5.0.0 tag using Docker Compose, the build fails due to a missing dependency `uv`.
-
-**Steps to Reproduce:**
-1. Clone the repo and checkout the 5.0.0 tag:
-   ```bash
-   git clone https://github.com/apache/superset.git
-   cd superset/
-   git fetch origin --tags
-   git checkout -b dev 5.0.0
-   ```
-2. Run:
-   ```bash
-   docker compose up --build
-   ```
-
-**Observed Behavior:**
-The build fails with the following error:
-```
-ERROR: Could not find a version that satisfies the requirement uv (from versions: none)
-ERROR: No matching distribution found for uv
-```
-
-**Expected Behavior:**
-The Docker image should build successfully without dependency resolution errors.
-
-**Environment:**
-- Superset version: 5.0.0 (tag)
-- Docker version 28.3.2, build 578ccf6
-- OS: Ubuntu 24.04
-
-**Additional Context:**
-It seems the `uv` package is not available on PyPI, which causes the build to fail. Possibly a missing or misconfigured dependency in `requirements` or `constraints`.
-
-
-
-### Screenshots/recordings
-
-_No response_
-
-### Superset version
-
-5.0.0
-
-### Python version
-
-3.11
-
-### Node version
-
-18 or greater
-
-### Browser
-
-Not applicable
-
-### Additional context
-
-```
-docker compose up --build
-[+] Building 292.8s (24/70)                                                                                                                                             
- => [internal] load local bake definitions                                                                                                                         0.0s
- => => reading from stdin 3.24kB                                                                                                                                   0.0s
- => [superset-websocket internal] load build definition from Dockerfile                                                                                            0.0s
- => => transferring dockerfile: 1.20kB                                
-
-... (truncated)
 
 ---
 
@@ -1592,7 +1461,6 @@ gunicorn --bind "0.0.0.0:$SUPERSET_PORT" "superset.app:create_app()" \
     --timeout "$GUNICORN_TIMEOUT" \
     --max-requests "$GUNICORN_MAX_REQUESTS" \
     --preload
-
 
 When I upgrade to version 5.0.0, using the image apache/superset:5.0.0, the application starts, applies the database migrations, and I can log in.
 
@@ -1861,68 +1729,6 @@ Only some parts of the UI are translated; other strings remain in English. The i
 
 ---
 
-### [Task] [6.0.0rc2] list of domain names that can embed this dashboard - not showing already added domains
-
-**Source:** [https://github.com/apache/superset/issues/35328](https://github.com/apache/superset/issues/35328)
-**Type:** Task
-
-### Bug description
-
-1. On 6.0.0rc2
-2. With attached config overrides ( in the comment below )
-3. Start with `docker compose -f docker-compose-non-dev.yml up --build -d`
-4. Navigate to dashboards
-5. Open the `Featured Charts` dashboard
-6. Click on three dots -> then embed under some domain like https://mytestdomain.com
-7. Save
-8. Navigate to datasets
-9. Navigate to dashboards again
-10. Open the `Featured Charts` dashboard again
-11. Click on three dots -> embed
-Expected:
-- The domains I added will be there
-Actual:
-- The UI will show an empty input
-
-
-## Notes
-- The input can detect if you enter the same domain again and prevents you from saving, so it's just the UI not reflecting the saved data.
-- The console does not show any relevant errors
-
-### Screenshots/recordings
-
-## Loom
-.
-https://www.loom.com/share/f81fbfccc5474d87b5891c2d195e32a8?sid=ea9d5541-eea4-4659-a370-e7528fa104ac
-
-### Superset version
-
-master / latest-dev
-
-### Python version
-
-Not applicable
-
-### Node version
-
-Not applicable
-
-### Browser
-
-Chrome
-
-### Additional context
-
-_No response_
-
-### Checklist
-
-- [x] I have searched Superset docs and Slack and didn't find a solution to my problem.
-- [x] I have searched the GitHub issue tracker and didn't find a similar bug report.
-- [x] I have checked Superset's logs for errors and if I found a relevant Python stacktrace, I included it here as text in the "additional context" section.
-
----
-
 ### [Task] Several errors with docker install and websocket config
 
 **Source:** [https://github.com/apache/superset/issues/35340](https://github.com/apache/superset/issues/35340)
@@ -1997,8 +1803,6 @@ server {
     server_name my.domain.fr;
 
     include conf.d/ssl.conf;
-
-
 
 ... (truncated)
 
@@ -2077,17 +1881,13 @@ _WHERE 1=1
   AND "Zone" IN {{ filter_values('Zone') | where_in }}
 {% endif %}_
 
-
 The charts display correct data when filters are applied. However, when I use Drill to Detail or Drill by on any chart, the resulting detail view shows zero records, even though the chart clearly shows data for the selected value.
-
 
 **Expected Behavior**
 Drill to Detail should return the filtered rows from the dataset that match the clicked chart element (e.g., Circle = C1, type_of_node = A).
 
-
 **Actual Behavior**
 Drill to Detail and Drill by return no rows, even though the chart shows non-zero values. This happens consistently across all three charts.
-
 
 **Notes**
 1. All datasets use Jinja templating for dynamic filters.
@@ -2097,7 +1897,6 @@ Drill to Detail and Drill by return no rows, even though the chart shows non-zer
 3. Native filters are scoped correctly to all charts.
 
 4. The issue seems to be with how Superset applies drill filters to Jinja-based queries across multiple datasets.
-
 
 ### Screenshots/recordings
 

@@ -2,6 +2,8 @@
 
 Event-driven issue remediation system that automatically detects GitHub issues by type (`Bug`, `Feature`, `Task`) and triggers [Devin AI](https://devin.ai) sessions to analyse, implement, and open pull requests — fully autonomous, zero human intervention.
 
+![Devin the autonomous AI Engineer] (docs/Summary.jpg)
+
 ## Architecture
 
 ```
