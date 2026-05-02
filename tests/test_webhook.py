@@ -303,21 +303,10 @@ class WebhookTestCase(unittest.TestCase):
     @patch("src.webhook.remediate_issue")
     def test_failed_session_allows_retry(self, mock_remediate) -> None:
         """An issue whose previous session failed should be retriable."""
-        from src.database import _get_connection
+        from src.database import _get_connection, reserve_issue
 
-        payload1 = {
-            "action": "opened",
-            "issue": {
-                "number": 64,
-                "title": "[Bug] Tooltip not showing",
-                "body": "Bug report",
-                "labels": [],
-            },
-            "repository": {"html_url": "https://github.com/test/repo"},
-        }
-        self._post_webhook(payload1)
-
-        # Mark the session as failed
+        # Insert a session for issue 64 and mark it as failed
+        reserve_issue(64, "[Bug] Tooltip not showing", "https://github.com/test/repo")
         conn = _get_connection()
         conn.execute("UPDATE sessions SET status = 'failed' WHERE issue_number = 64")
         conn.commit()
