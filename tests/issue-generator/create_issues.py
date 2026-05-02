@@ -36,25 +36,28 @@ def _extract_owner_repo(repo_url: str) -> str:
 def _parse_issues(filepath: str) -> list[dict]:
     """Parse issues.md into a list of issue dicts.
 
-    Each issue block starts with ### [Type] Title and ends at the next ---
-    separator or next ### heading.
+    Splits on ### [Type] Title headings.  Internal --- separators within
+    issue bodies are preserved.
     """
     with open(filepath) as f:
         content = f.read()
 
-    issues = []
-    # Match ### [Type] Title blocks
-    pattern = re.compile(
-        r"^### \[(?P<type>Bug|Feature|Task)\] (?P<title>.+?)$"
-        r"(?P<meta_and_body>.*?)"
-        r"(?=^---$|\Z)",
-        re.MULTILINE | re.DOTALL,
-    )
+    # Split into blocks at each ### [Type] heading
+    heading_pattern = re.compile(r"^### \[(Bug|Feature|Task)\] (.+?)$", re.MULTILINE)
+    matches = list(heading_pattern.finditer(content))
 
-    for match in pattern.finditer(content):
-        issue_type = match.group("type")
-        title = match.group("title").strip()
-        block = match.group("meta_and_body").strip()
+    issues = []
+    for i, m in enumerate(matches):
+        issue_type = m.group(1)
+        title = m.group(2).strip()
+
+        # Block runs from after the heading to the next heading (or EOF)
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
+        block = content[start:end].strip()
+
+        # Strip trailing --- separator between issues
+        block = re.sub(r"\n---\s*$", "", block)
 
         # Extract source URL
         source_match = re.search(r"\*\*Source:\*\* \[.*?\]\((.*?)\)", block)
@@ -64,13 +67,17 @@ def _parse_issues(filepath: str) -> list[dict]:
         body_match = re.search(r"\*\*Type:\*\* \w+\s*\n(.*)", block, re.DOTALL)
         body = body_match.group(1).strip() if body_match else ""
 
+        # raw_block = full text from heading to next heading (for removal)
+        raw_end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
+        raw_block = content[m.start() : raw_end]
+
         issues.append(
             {
                 "type": issue_type,
                 "title": title,
                 "body": body,
                 "source_url": source_url,
-                "raw_match": match.group(0),
+                "raw_match": raw_block,
             }
         )
 
@@ -107,13 +114,8 @@ def _remove_issue_from_file(filepath: str, raw_match: str) -> None:
     with open(filepath) as f:
         content = f.read()
 
-    # Remove the issue block + trailing separator
-    block_with_sep = raw_match.strip() + "\n\n---\n"
-    if block_with_sep in content:
-        content = content.replace(block_with_sep, "", 1)
-    else:
-        # Fallback: just remove the block
-        content = content.replace(raw_match, "", 1)
+    # Remove the full issue block (heading through to next heading)
+    content = content.replace(raw_match, "", 1)
 
     # Clean up multiple blank lines
     content = re.sub(r"\n{3,}", "\n\n", content)
