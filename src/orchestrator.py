@@ -218,7 +218,7 @@ def _finish_devin_session(session_id: str) -> bool:
         resp = requests.delete(
             url,
             headers=_headers(),
-            params={"archive": True},
+            params={"archive": "true"},
             timeout=30,
         )
         return resp.status_code in (200, 204)
