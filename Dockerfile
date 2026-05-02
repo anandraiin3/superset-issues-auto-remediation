@@ -14,4 +14,4 @@ ENV DASHBOARD_PORT=5000
 
 EXPOSE ${DASHBOARD_PORT}
 
-CMD sh -c "gunicorn --bind 0.0.0.0:${DASHBOARD_PORT} --workers 2 --threads 4 'app:create_app()'"
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${DASHBOARD_PORT} --workers 2 --threads 4 --preload 'app:create_app()'"]
